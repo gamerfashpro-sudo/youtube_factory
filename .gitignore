@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Build output
+build/
+dist/
+*.spec.bak
+
+# Secrets and local data (never commit)
+.env
+*.sqlite
+*.sqlite3
+*.db
+*.log
+
+# Editors / OS
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
