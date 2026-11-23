@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QEvent, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -26,7 +26,7 @@ from youtube_factory.services.analyzer import format_time
 from youtube_factory.ui.widgets.common import make_button, make_card, make_label
 from youtube_factory.ui.widgets.short_card import ShortCard
 
-CARD_MIN_WIDTH = 380
+CARD_MIN_WIDTH = 440
 
 
 def safe_filename(title: str) -> str:
@@ -52,6 +52,7 @@ class ResultsView(QWidget):
         self._analysis: Analysis | None = None
         self._cards: list[ShortCard] = []
         self._columns = 0
+        self._fitting = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(32, 28, 32, 20)
@@ -60,12 +61,9 @@ class ResultsView(QWidget):
         header = make_card()
         h = QHBoxLayout(header)
         h.setContentsMargins(18, 16, 18, 16)
-        self.thumb = make_label("▶")
+        self.thumb = make_label("▶", thumb=True)
         self.thumb.setFixedSize(160, 90)
         self.thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.thumb.setStyleSheet(
-            "background: #1C1C20; border-radius: 10px; color: #7C5CFF; font-size: 28pt;"
-        )
         h.addWidget(self.thumb)
         info = QVBoxLayout()
         self.title_label = make_label(wrap=True, h2=True)
@@ -100,6 +98,7 @@ class ResultsView(QWidget):
         self.grid.setSpacing(14)
         self.grid.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll.setWidget(self.grid_host)
+        self.scroll.viewport().installEventFilter(self)
         outer.addWidget(self.scroll, 1)
         self.empty_label = make_label(ru.RESULTS_EMPTY, wrap=True, muted=True)
         self.empty_label.hide()
@@ -150,8 +149,7 @@ class ResultsView(QWidget):
             self.grid.removeWidget(card)
             card.hide()
         visible = self._visible_cards()
-        width = max(self.scroll.viewport().width(), CARD_MIN_WIDTH)
-        cols = max(1, width // CARD_MIN_WIDTH)
+        cols = self._column_count()
         self._columns = cols
         for i, card in enumerate(visible):
             self.grid.addWidget(card, i // cols, i % cols)
@@ -159,12 +157,38 @@ class ResultsView(QWidget):
         for c in range(cols):
             self.grid.setColumnStretch(c, 1)
         self.empty_label.setVisible(not visible)
+        self._fit_heights()
 
-    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
-        super().resizeEvent(event)
-        cols = max(1, max(self.scroll.viewport().width(), CARD_MIN_WIDTH) // CARD_MIN_WIDTH)
-        if cols != self._columns and self._cards:
-            self._relayout()
+    def _fit_heights(self) -> None:
+        """Give every card the height its wrapped text needs.
+
+        QGridLayout underestimates the height of word-wrapped labels, which made
+        neighbouring text overlap. Measure after layout and enforce a minimum.
+        """
+        if self._fitting:
+            return
+        self._fitting = True
+        try:
+            visible = [c for c in self._cards if not c.isHidden()]
+            for card in visible:
+                card.setMinimumHeight(0)
+            self.grid.activate()
+            for card in visible:
+                card.setMinimumHeight(card.layout().heightForWidth(card.width()))
+        finally:
+            self._fitting = False
+
+    def _column_count(self) -> int:
+        return max(1, max(self.scroll.viewport().width(), CARD_MIN_WIDTH) // CARD_MIN_WIDTH)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt override
+        # React to the scroll area's real size, which is only known after layout.
+        if watched is self.scroll.viewport() and event.type() == QEvent.Type.Resize and self._cards:
+            if self._column_count() != self._columns:
+                self._relayout()
+            else:
+                self._fit_heights()
+        return super().eventFilter(watched, event)
 
     # --- actions ----------------------------------------------------------
     def _open_url(self) -> None:

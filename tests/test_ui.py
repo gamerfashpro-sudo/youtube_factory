@@ -154,3 +154,23 @@ def test_cancel_analysis(qtbot, window):
     with qtbot.waitSignal(window.controller.analysis_cancelled, timeout=15000):
         window.controller.cancel()
     assert not window.analysis.back_btn.isHidden()
+
+
+def test_cards_are_tall_enough_for_wrapped_text(qtbot, window):
+    """Regression: grid rows were shorter than wrapped text needed, so text overlapped."""
+    window.resize(1200, 800)
+    run_demo(qtbot, window)
+    qtbot.wait(150)
+    for card in window.results._cards:
+        needed = card.layout().heightForWidth(card.width())
+        assert card.height() >= needed
+
+
+def test_results_use_two_columns_on_wide_window(qtbot, window):
+    window.resize(1200, 800)
+    run_demo(qtbot, window)
+    qtbot.wait(150)
+    assert window.results._columns == 2
+    window.resize(900, 700)
+    qtbot.wait(150)
+    assert window.results._columns == 1

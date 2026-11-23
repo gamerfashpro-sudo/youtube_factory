@@ -30,7 +30,7 @@ class ShortCard(QFrame):
         super().__init__(parent)
         self.short = short
         self.setProperty("card", True)
-        self.setMinimumWidth(340)
+        self.setMinimumWidth(420)
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 16, 18, 16)
         root.setSpacing(8)
@@ -81,14 +81,16 @@ class ShortCard(QFrame):
         edit.addLayout(edit_buttons)
         self.edit_panel.hide()
         root.addWidget(self.edit_panel)
+        # Extra height (from a taller neighbour in the grid row) goes here, not between labels.
+        root.addStretch(1)
 
         self.actions = QWidget()
         actions = QHBoxLayout(self.actions)
         actions.setContentsMargins(0, 4, 0, 0)
-        self.copy_btn = make_button(ru.BTN_COPY, ru.TIP_COPY)
-        self.edit_btn = make_button(ru.BTN_EDIT, ru.TIP_EDIT)
-        self.fav_btn = make_button("")
-        self.delete_btn = make_button(ru.BTN_DELETE, ru.TIP_DELETE, danger=True)
+        self.copy_btn = make_button(ru.BTN_COPY, ru.TIP_COPY, compact=True)
+        self.edit_btn = make_button(ru.BTN_EDIT, ru.TIP_EDIT, compact=True)
+        self.fav_btn = make_button("", compact=True)
+        self.delete_btn = make_button(ru.BTN_DELETE, ru.TIP_DELETE, danger=True, compact=True)
         for b in (self.copy_btn, self.edit_btn, self.fav_btn):
             actions.addWidget(b)
         actions.addStretch(1)

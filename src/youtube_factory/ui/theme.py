@@ -73,6 +73,9 @@ QLabel[h1="true"] {{ font-size: 24pt; font-weight: 700; }}
 QLabel[h2="true"] {{ font-size: 15pt; font-weight: 600; }}
 QLabel[score="true"] {{ color: {p.score}; font-weight: 700; font-size: 13pt; }}
 QLabel[error="true"] {{ color: {p.danger}; }}
+QLabel[thumb="true"] {{
+    background: {p.surface_alt}; border-radius: 10px; color: {p.accent}; font-size: 28pt;
+}}
 QLabel[time="true"] {{ color: {p.accent_hover}; font-weight: 600; }}
 QFrame[card="true"] {{
     background: {p.surface}; border: 1px solid {p.border}; border-radius: 14px;
@@ -95,6 +98,7 @@ QPushButton[nav="true"] {{
 }}
 QPushButton[nav="true"]:checked {{ background: {p.surface_alt}; color: {p.accent_hover}; }}
 QPushButton[nav="true"]:hover {{ background: {p.surface_alt}; }}
+QPushButton[compact="true"] {{ padding: 6px 12px; }}
 QPushButton[danger="true"] {{ color: {p.danger}; }}
 QPushButton[fav="true"] {{ color: {p.score}; border-color: {p.score}; }}
 QLineEdit, QPlainTextEdit, QTextEdit, QComboBox {{
@@ -109,6 +113,12 @@ QComboBox QAbstractItemView {{
     background: {p.surface}; color: {p.text}; selection-background-color: {p.accent};
 }}
 QCheckBox {{ color: {p.text}; spacing: 8px; }}
+QCheckBox::indicator {{
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1px solid {p.text_muted}; background: {p.surface};
+}}
+QCheckBox::indicator:hover {{ border-color: {p.accent}; }}
+QCheckBox::indicator:checked {{ background: {p.accent}; border-color: {p.accent}; }}
 QProgressBar {{
     background: {p.surface_alt}; border: none; border-radius: 4px; height: 8px;
     text-align: center; color: transparent;

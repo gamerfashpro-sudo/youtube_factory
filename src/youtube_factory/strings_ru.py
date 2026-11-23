@@ -70,8 +70,8 @@ BTN_SAVE = "Сохранить"
 BTN_COPY = "Копировать"
 BTN_EDIT = "Править"
 BTN_DELETE = "Удалить"
-FAV_ON = "★ В избранном"
-FAV_OFF = "☆ В избранное"
+FAV_ON = "В избранном"
+FAV_OFF = "В избранное"
 
 # History
 HISTORY_TITLE = "История анализов"
