@@ -43,6 +43,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 # Demo transcript and analyzer word lists contain long Russian text lines.
 "src/youtube_factory/services/demo.py" = ["E501"]
 "src/youtube_factory/services/analyzer.py" = ["E501"]
+"src/youtube_factory/strings_ru.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -66,9 +66,7 @@ def export_json(path: Path, video: VideoInfo, shorts: Sequence[Short]) -> None:
         "shorts": [short_to_dict(s) for s in shorts],
     }
     try:
-        Path(path).write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        Path(path).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError as exc:
         raise ExportError(str(exc)) from exc
 

@@ -89,9 +89,7 @@ class AnalysisRepository:
         return int(cur.lastrowid)
 
     def get(self, analysis_id: int) -> Analysis | None:
-        row = self._conn.execute(
-            "SELECT * FROM analyses WHERE id = ?", (analysis_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
         if row is None:
             return None
         shorts = [

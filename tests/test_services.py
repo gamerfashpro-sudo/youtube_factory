@@ -32,8 +32,15 @@ def test_extract_video_id(text):
 
 
 @pytest.mark.parametrize(
-    "text", ["", "   ", "hello", "https://example.com/watch?v=" + VID,
-             "https://www.youtube.com/watch?v=short", "https://www.youtube.com/"]
+    "text",
+    [
+        "",
+        "   ",
+        "hello",
+        "https://example.com/watch?v=" + VID,
+        "https://www.youtube.com/watch?v=short",
+        "https://www.youtube.com/",
+    ],
 )
 def test_extract_video_id_invalid(text):
     with pytest.raises(InvalidUrlError):
@@ -135,8 +142,19 @@ def test_format_range():
 
 
 def _shorts():
-    return [Short(134, 182, "Хук «тест»", "Название; с точкой", "Описание\nв две строки",
-                  ["#shorts", "#тест"], 77, "Причина", is_favorite=True)]
+    return [
+        Short(
+            134,
+            182,
+            "Хук «тест»",
+            "Название; с точкой",
+            "Описание\nв две строки",
+            ["#shorts", "#тест"],
+            77,
+            "Причина",
+            is_favorite=True,
+        )
+    ]
 
 
 def test_export_csv_has_bom_and_cyrillic(tmp_path):

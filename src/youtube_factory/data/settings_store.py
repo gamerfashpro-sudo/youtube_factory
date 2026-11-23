@@ -52,7 +52,5 @@ class SettingsStore:
         settings.normalized()
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(".json.tmp")
-        tmp.write_text(
-            json.dumps(asdict(settings), ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        tmp.write_text(json.dumps(asdict(settings), ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self._path)
