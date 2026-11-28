@@ -6,17 +6,22 @@ import logging
 
 from PySide6.QtCore import QObject, Signal
 
+from youtube_factory.app.clip_worker import ClipWorker
 from youtube_factory.app.workers import (
     MANUAL_FALLBACK_CODES,
     AnalysisRequest,
     AnalysisWorker,
+    clip_error_reason,
     error_code,
     error_message,
 )
+from youtube_factory.data.paths import default_clips_dir
 from youtube_factory.data.repositories import AnalysisRepository, HistoryItem
 from youtube_factory.data.settings_store import Settings, SettingsStore
 from youtube_factory.integrations.base import VideoSource
-from youtube_factory.models import Analysis, AnalysisMode, Short, TranscriptSegment
+from youtube_factory.models import Analysis, AnalysisMode, Short, TranscriptSegment, VideoInfo
+from youtube_factory.services import clipper, tools
+from youtube_factory.services.clipper import ClipRequest
 from youtube_factory.services.url_parser import InvalidUrlError, extract_video_id
 
 log = logging.getLogger(__name__)
@@ -30,6 +35,12 @@ class AppController(QObject):
     analysis_cancelled = Signal()
     history_changed = Signal()
     settings_changed = Signal(object)
+    clips_preparing = Signal(str, float)  # tool title, 0..1
+    clip_started = Signal(object)  # short
+    clip_progress = Signal(object, float)  # short, 0..1
+    clip_done = Signal(object, str)  # short, file path
+    clip_failed = Signal(object, str)  # short, reason in Russian
+    clips_finished = Signal(int, int, bool, str)  # ok, failed, cancelled, folder
 
     def __init__(
         self,
@@ -44,6 +55,11 @@ class AppController(QObject):
         self._settings_store = settings_store
         self.settings: Settings = settings_store.load()
         self._worker: AnalysisWorker | None = None
+        self._clip_worker: ClipWorker | None = None
+        self.clip_maker = clipper.make_clip  # both replaced in tests
+        self.ensure_tools = tools.ensure_tools
+        self._clip_shorts: list[Short] = []
+        self._clip_dir = ""
         self.last_url = ""
         self.last_title = ""
 
@@ -97,6 +113,9 @@ class AppController(QObject):
         if self._worker is not None:
             self._worker.requestInterruption()
             self._worker.wait(ms)
+        if self._clip_worker is not None:
+            self._clip_worker.requestInterruption()
+            self._clip_worker.wait(ms)
 
     def _on_done(self, analysis: Analysis) -> None:
         try:
@@ -111,6 +130,64 @@ class AppController(QObject):
 
     def _on_thread_finished(self) -> None:
         worker, self._worker = self._worker, None
+        if worker is not None:
+            worker.deleteLater()
+
+    # --- clips --------------------------------------------------------------
+    @property
+    def clips_running(self) -> bool:
+        return self._clip_worker is not None and self._clip_worker.isRunning()
+
+    def clips_folder(self) -> str:
+        return self.settings.clips_dir or str(default_clips_dir())
+
+    @staticmethod
+    def can_make_clips(video: VideoInfo) -> bool:
+        return bool(video.video_id and video.url)
+
+    def start_clips(self, video: VideoInfo, shorts: list[Short]) -> bool:
+        """Make vertical videos for the given Shorts. Returns False if nothing was started."""
+        if self.clips_running or not shorts or not self.can_make_clips(video):
+            return False
+        folder = self.clips_folder()
+        from pathlib import Path
+
+        requests = [
+            ClipRequest(
+                url=video.url,
+                title=video.title,
+                index=i,
+                start_sec=s.start_sec,
+                end_sec=s.end_sec,
+                out_dir=Path(folder),
+                style=self.settings.clip_style,
+                video_duration=float(video.duration_sec),
+            )
+            for i, s in enumerate(shorts, start=1)
+        ]
+        worker = ClipWorker(requests, self.clip_maker, self.ensure_tools, parent=self)
+        self._clip_shorts, self._clip_dir = list(shorts), folder
+        worker.preparing.connect(self.clips_preparing)
+        worker.item_started.connect(lambda i: self.clip_started.emit(self._clip_shorts[i]))
+        worker.item_progress.connect(lambda i, f: self.clip_progress.emit(self._clip_shorts[i], f))
+        worker.item_done.connect(lambda i, path: self.clip_done.emit(self._clip_shorts[i], path))
+        worker.item_failed.connect(
+            lambda i, code: self.clip_failed.emit(self._clip_shorts[i], clip_error_reason(code))
+        )
+        worker.batch_done.connect(
+            lambda ok, failed, cancelled: self.clips_finished.emit(ok, failed, cancelled, folder)
+        )
+        worker.finished.connect(self._on_clip_thread_finished)
+        self._clip_worker = worker
+        worker.start()
+        return True
+
+    def cancel_clips(self) -> None:
+        if self.clips_running:
+            self._clip_worker.requestInterruption()
+
+    def _on_clip_thread_finished(self) -> None:
+        worker, self._clip_worker = self._clip_worker, None
         if worker is not None:
             worker.deleteLater()
 

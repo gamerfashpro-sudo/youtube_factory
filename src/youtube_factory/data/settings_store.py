@@ -22,6 +22,8 @@ class Settings:
     theme: str = "dark"
     export_dir: str = ""
     animations: bool = True
+    clips_dir: str = ""
+    clip_style: str = "blur"
     window_width: int = 1200
     window_height: int = 800
 
@@ -29,6 +31,8 @@ class Settings:
         if self.theme not in THEMES:
             self.theme = "dark"
         self.animations = bool(self.animations)
+        if self.clip_style not in ("blur", "crop", "fit"):
+            self.clip_style = "blur"
         self.window_width = max(900, min(7680, int(self.window_width)))
         self.window_height = max(600, min(4320, int(self.window_height)))
         return self

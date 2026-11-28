@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, QUrl, Signal
@@ -14,6 +13,7 @@ from youtube_factory.app.controller import AppController
 from youtube_factory.models import Analysis, AnalysisMode, Short
 from youtube_factory.services import exporter
 from youtube_factory.services.analyzer import format_time
+from youtube_factory.services.exporter import safe_filename
 from youtube_factory.ui.widgets.common import make_label, transparent_scroll
 from youtube_factory.ui.widgets.controls import Chip, GlassButton, Segmented
 from youtube_factory.ui.widgets.dialogs import confirm
@@ -25,12 +25,7 @@ CARD_MIN_WIDTH = 440
 REVEAL_STEP_MS = 55
 REVEAL_MAX = 8  # cards beyond this appear together with the last staggered one
 
-__all__ = ["ResultsView", "confirm", "safe_filename"]
-
-
-def safe_filename(title: str) -> str:
-    name = re.sub(r'[\\/:*?"<>|\r\n\t]+', "_", title).strip(" ._")
-    return name[:60] or "shorts"
+__all__ = ["ResultsView", "confirm"]
 
 
 class ResultsView(QWidget):

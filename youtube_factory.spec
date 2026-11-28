@@ -6,6 +6,8 @@
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
 ROOT = Path(SPECPATH)
 
 # Qt modules the application does not use; excluding them keeps the exe small.
@@ -23,6 +25,8 @@ EXCLUDES = [
     "PySide6.QtRemoteObjects", "PySide6.QtScxml", "PySide6.QtStateMachine",
     "PySide6.QtTextToSpeech", "PySide6.QtHttpServer",
     "tkinter", "pytest", "ruff",
+    # ffmpeg and Deno are downloaded on first use, never bundled (about 100 MB each).
+    "imageio_ffmpeg", "deno",
 ]
 
 a = Analysis(
@@ -31,8 +35,10 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(ROOT / "src" / "youtube_factory" / "resources"), "youtube_factory/resources"),
+        # JavaScript solver scripts that yt-dlp needs for YouTube.
+        *collect_data_files("yt_dlp_ejs"),
     ],
-    hiddenimports=[],
+    hiddenimports=[*collect_submodules("yt_dlp"), *collect_submodules("yt_dlp_ejs")],
     hookspath=[],
     runtime_hooks=[],
     excludes=EXCLUDES,

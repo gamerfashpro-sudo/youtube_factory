@@ -49,3 +49,9 @@ def long_path(path: Path) -> str:
             return "\\\\?\\UNC\\" + resolved[2:]
         return "\\\\?\\" + resolved
     return resolved
+
+
+def default_clips_dir() -> Path:
+    """Where finished Shorts go unless the user picked another folder."""
+    videos = Path.home() / "Videos"
+    return (videos if videos.is_dir() else Path.home()) / "YouTube Factory"

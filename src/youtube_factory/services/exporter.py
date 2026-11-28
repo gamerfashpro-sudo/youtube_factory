@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -20,6 +21,12 @@ CSV_HEADERS = [
     "Почему сработает",
     "Избранное",
 ]
+
+
+def safe_filename(title: str, limit: int = 60) -> str:
+    """Make text usable as a Windows file name."""
+    name = re.sub(r'[\\/:*?"<>|\r\n\t]+', "_", title).strip(" ._")
+    return name[:limit].rstrip(" ._") or "shorts"
 
 
 class ExportError(OSError):

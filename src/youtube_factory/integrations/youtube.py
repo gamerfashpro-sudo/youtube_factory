@@ -60,6 +60,14 @@ def classify_error(message: str) -> str:
     return "net_error"
 
 
+def _tool_options() -> dict[str, Any]:
+    """Use Deno when it is installed; YouTube needs it for some videos."""
+    from youtube_factory.services.clipper import ytdlp_tool_options
+
+    options = ytdlp_tool_options()
+    return {"js_runtimes": options["js_runtimes"]} if "js_runtimes" in options else {}
+
+
 def _default_extract(url: str) -> dict[str, Any]:
     import yt_dlp
 
@@ -70,6 +78,7 @@ def _default_extract(url: str) -> dict[str, Any]:
         "noplaylist": True,
         "socket_timeout": NET_TIMEOUT_S,
         "retries": 2,
+        **_tool_options(),
     }
     with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(url, download=False)

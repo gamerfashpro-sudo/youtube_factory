@@ -44,6 +44,29 @@ ERROR_MESSAGES = {
     "bot_check": ru.ERR_BOT_CHECK,
 }
 
+# Short reasons shown on a clip card (they follow "Не получилось: ").
+CLIP_ERROR_REASONS = {
+    "clip_download_failed": ru.ERR_CLIP_DOWNLOAD,
+    "clip_convert_failed": ru.ERR_CLIP_CONVERT,
+    "ffmpeg_missing": ru.ERR_CLIP_FFMPEG,
+    "tools_download_failed": ru.ERR_TOOLS_DOWNLOAD,
+    "tools_corrupt": ru.ERR_TOOLS_CORRUPT,
+    "tools_missing": ru.ERR_CLIP_FFMPEG,
+    "clip_folder": ru.ERR_CLIP_FOLDER,
+    "no_source": ru.ERR_CLIP_NO_SOURCE,
+    "net_offline": ru.ERR_NET_OFFLINE.rstrip(".").lower(),
+    "bot_check": ru.ERR_BOT_CHECK,
+    "video_unavailable": ru.ERR_VIDEO_UNAVAILABLE.rstrip(".").lower(),
+    "video_private": ru.ERR_VIDEO_PRIVATE.rstrip(".").lower(),
+    "age_restricted": ru.ERR_AGE_RESTRICTED,
+    "video_live": ru.ERR_VIDEO_LIVE,
+}
+
+
+def clip_error_reason(code: str) -> str:
+    return CLIP_ERROR_REASONS.get(code, ru.ERR_UNKNOWN.rstrip(".").lower())
+
+
 # Errors after which pasting a transcript by hand can still get the user to a result.
 MANUAL_FALLBACK_CODES = frozenset({"no_transcript", "net_error", "bot_check"})
 

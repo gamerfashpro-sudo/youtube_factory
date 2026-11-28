@@ -161,6 +161,7 @@ def _integrations_ok() -> bool:
     """Check that the bundled third-party tools are present. Needs no network."""
     try:
         import yt_dlp
+        import yt_dlp_ejs  # noqa: F401 - solver scripts must be present in the bundle
         from yt_dlp.extractor import get_info_extractor
 
         get_info_extractor("Youtube")

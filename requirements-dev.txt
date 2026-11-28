@@ -3,3 +3,4 @@ pytest>=8.0
 pytest-qt>=4.4
 ruff>=0.5
 pyinstaller>=6.5
+imageio-ffmpeg>=0.5.1  # ffmpeg for clip tests; the exe downloads its own copy
