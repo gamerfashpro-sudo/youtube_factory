@@ -39,6 +39,9 @@ class ResultsView(QWidget):
         self._cards: list[ShortCard] = []
         self._columns = 0
         self._fitting = False
+        self._batch_total = 0
+        self._batch_done = 0
+        self._clips_folder = ""
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(32, 28, 32, 20)
@@ -76,12 +79,24 @@ class ResultsView(QWidget):
         self.csv_btn = GlassButton(
             ru.BTN_EXPORT_CSV, "secondary", "export", ru.EXPORT_SELECTED_HINT
         )
-        self.new_btn = GlassButton(ru.BTN_NEW_ANALYSIS, "primary", "plus")
+        self.clips_btn = GlassButton(ru.BTN_MAKE_ALL, "primary", "film")
+        self.new_btn = GlassButton(ru.BTN_NEW_ANALYSIS, "secondary", "plus")
         toolbar.addWidget(self.fav_filter)
         toolbar.addStretch(1)
-        for b in (self.json_btn, self.csv_btn, self.new_btn):
+        for b in (self.json_btn, self.csv_btn, self.new_btn, self.clips_btn):
             toolbar.addWidget(b)
         outer.addLayout(toolbar)
+
+        # One line of status for the whole download batch.
+        self.status_row = QWidget()
+        status = QHBoxLayout(self.status_row)
+        status.setContentsMargins(4, 0, 0, 0)
+        self.status_label = make_label(role="muted")
+        self.folder_btn = GlassButton(ru.BTN_OPEN_CLIPS, "ghost", "folder", height=32)
+        status.addWidget(self.status_label, 1)
+        status.addWidget(self.folder_btn)
+        self.status_row.hide()
+        outer.addWidget(self.status_row)
 
         self.grid_host = QWidget()
         self.grid = QGridLayout(self.grid_host)
@@ -100,6 +115,15 @@ class ResultsView(QWidget):
         self.json_btn.clicked.connect(lambda: self._export("json"))
         self.csv_btn.clicked.connect(lambda: self._export("csv"))
         self.new_btn.clicked.connect(self.new_analysis_requested)
+        self.clips_btn.clicked.connect(self._clips_button_clicked)
+        self.folder_btn.clicked.connect(self._open_clips_folder)
+        c = controller
+        c.clips_preparing.connect(self._on_preparing)
+        c.clip_started.connect(self._on_clip_started)
+        c.clip_progress.connect(self._on_clip_progress)
+        c.clip_done.connect(self._on_clip_done)
+        c.clip_failed.connect(self._on_clip_failed)
+        c.clips_finished.connect(self._on_clips_finished)
 
     # --- data -------------------------------------------------------------
     def set_analysis(self, analysis: Analysis) -> None:
@@ -129,6 +153,8 @@ class ResultsView(QWidget):
             self._cards.append(self._make_card(short, v.duration_sec))
         self._columns = 0
         self._relayout()
+        self.status_row.hide()
+        self._update_clips_button()
         for i, card in enumerate(c for c in self._cards if not c.isHidden()):
             card.score_ring.set_score(card.short.score, animate=True)
             card.reveal(min(i, REVEAL_MAX) * REVEAL_STEP_MS)
@@ -139,6 +165,11 @@ class ResultsView(QWidget):
         card.save_requested.connect(self._save_text)
         card.favorite_toggled.connect(self._toggle_favorite)
         card.delete_requested.connect(self._delete)
+        card.selection_changed.connect(self._update_clips_button)
+        card.make_clip_requested.connect(lambda sh: self._start_clips([sh]))
+        card.open_folder_requested.connect(self._open_clips_folder)
+        card.clip_btn.setEnabled(self._can_clip())
+        card.clip_btn.setToolTip(ru.TIP_MAKE_CLIP if self._can_clip() else ru.CLIPS_NEED_URL)
         return card
 
     # --- layout -----------------------------------------------------------
@@ -195,6 +226,120 @@ class ResultsView(QWidget):
             else:
                 self._fit_heights()
         return super().eventFilter(watched, event)
+
+    # --- clips --------------------------------------------------------------
+    def _can_clip(self) -> bool:
+        return bool(
+            self._analysis
+            and self._controller.can_make_clips(self._analysis.video, self._analysis.mode)
+        )
+
+    def _card_for(self, short: Short) -> ShortCard | None:
+        return next((c for c in self._cards if c.short is short), None)
+
+    def _update_clips_button(self) -> None:
+        running = self._controller.clips_running
+        picked = any(c.is_selected() for c in self._cards)
+        if running:
+            self.clips_btn.setText(ru.BTN_CANCEL_CLIPS)
+            self.clips_btn.variant = "secondary"
+            self.clips_btn.set_icon_name("close")
+            self.clips_btn.setEnabled(True)
+        else:
+            self.clips_btn.setText(ru.BTN_MAKE_SELECTED if picked else ru.BTN_MAKE_ALL)
+            self.clips_btn.variant = "primary"
+            self.clips_btn.set_icon_name("film")
+            can = self._can_clip() and bool(self._cards)
+            self.clips_btn.setEnabled(can)
+            self.clips_btn.setToolTip("" if can or not self._cards else ru.CLIPS_NEED_URL)
+        for card in self._cards:
+            if card.clip_state not in ("queued", "working"):
+                card.clip_btn.setEnabled(not running and self._can_clip())
+        self.clips_btn.updateGeometry()
+        self.clips_btn.update()
+
+    def _clips_button_clicked(self) -> None:
+        if self._controller.clips_running:
+            self._controller.cancel_clips()
+            return
+        chosen = [c.short for c in self._cards if c.is_selected()]
+        self._start_clips(chosen or [c.short for c in self._visible_cards()])
+
+    def _start_clips(self, shorts: list[Short]) -> None:
+        if not self._analysis or not shorts:
+            return
+        if self._controller.clips_running:
+            return
+        if not self._controller.start_clips(self._analysis.video, shorts, self._analysis.mode):
+            self.toast_requested.emit(ru.CLIPS_NEED_URL, True)
+            return
+        self._batch_total = len(shorts)
+        self._batch_done = 0
+        for short in shorts:
+            card = self._card_for(short)
+            if card:
+                card.set_clip_state("queued", ru.CLIP_WAITING)
+        self._set_status(ru.CLIP_WAITING)
+        self.folder_btn.hide()
+        self._update_clips_button()
+        self._fit_heights()
+
+    def _set_status(self, text: str) -> None:
+        self.status_label.setText(text)
+        self.status_row.show()
+
+    def _on_preparing(self, tool: str, fraction: float) -> None:
+        self._set_status(ru.CLIP_TOOLS_PREPARING.format(tool=tool, percent=int(fraction * 100)))
+
+    def _on_clip_started(self, short: Short) -> None:
+        card = self._card_for(short)
+        if card:
+            card.set_clip_state("working", ru.CLIP_WORKING.format(percent=0), 0.0)
+            self._fit_heights()
+        self._set_status(ru.CLIPS_PROGRESS.format(n=self._batch_done + 1, total=self._batch_total))
+
+    def _on_clip_progress(self, short: Short, fraction: float) -> None:
+        card = self._card_for(short)
+        if card:
+            card.set_clip_state(
+                "working", ru.CLIP_WORKING.format(percent=int(fraction * 100)), fraction
+            )
+
+    def _on_clip_done(self, short: Short, path: str) -> None:
+        self._batch_done += 1
+        card = self._card_for(short)
+        if card:
+            card.set_clip_state("done", ru.CLIP_READY.format(name=Path(path).name), 1.0)
+
+    def _on_clip_failed(self, short: Short, reason: str) -> None:
+        self._batch_done += 1
+        card = self._card_for(short)
+        if card:
+            card.set_clip_state("failed", ru.CLIP_FAILED.format(reason=reason), 1.0)
+            self._fit_heights()
+
+    def _on_clips_finished(self, ok: int, failed: int, cancelled: bool, folder: str) -> None:
+        total = getattr(self, "_batch_total", ok + failed)
+        for card in self._cards:
+            if card.clip_state in ("queued", "working"):
+                card.set_clip_state("idle")
+        self._clips_folder = folder
+        if cancelled:
+            message = ru.CLIPS_BATCH_CANCELLED.format(ok=ok)
+        elif failed:
+            message = ru.CLIPS_BATCH_PARTIAL.format(ok=ok, total=total, failed=failed)
+        else:
+            message = ru.CLIPS_BATCH_DONE.format(ok=ok, total=total, folder=Path(folder).name)
+        self._set_status(message)
+        self.folder_btn.setVisible(ok > 0)
+        self.toast_requested.emit(message, bool(failed) and not ok)
+        self._update_clips_button()
+        self._fit_heights()
+
+    def _open_clips_folder(self) -> None:
+        folder = getattr(self, "_clips_folder", "") or self._controller.clips_folder()
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     # --- actions ----------------------------------------------------------
     def _open_url(self) -> None:

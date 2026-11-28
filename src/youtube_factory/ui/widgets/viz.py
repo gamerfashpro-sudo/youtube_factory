@@ -238,3 +238,46 @@ class Thumb(QWidget):
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.setPen(QPen(with_alpha(QColor("white"), 40), 1.0))
         p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 13.5, 13.5)
+
+
+class ProgressLine(QWidget):
+    """Slim progress bar that glides to each new value."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._value = Tween(self)
+        self.kind = "work"  # work, done, failed
+        self.setFixedHeight(6)
+
+    def set_value(self, fraction: float, animate: bool = True) -> None:
+        fraction = max(0.0, min(1.0, fraction))
+        if animate:
+            self._value.go(fraction, 350)
+        else:
+            self._value.jump(fraction)
+
+    def value(self) -> float:
+        return self._value.value
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+        pal = theme.p
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        r = QRectF(self.rect())
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(pal.track)
+        p.drawRoundedRect(r, 3, 3)
+        width = r.width() * self._value.value
+        if width < 1:
+            return
+        fill = QRectF(0, 0, max(width, 6.0), r.height())
+        if self.kind == "failed":
+            p.setBrush(pal.danger)
+        elif self.kind == "done":
+            p.setBrush(pal.success)
+        else:
+            g = QLinearGradient(fill.topLeft(), fill.topRight())
+            g.setColorAt(0.0, pal.accent)
+            g.setColorAt(1.0, pal.accent_hi)
+            p.setBrush(g)
+        p.drawRoundedRect(fill, 3, 3)

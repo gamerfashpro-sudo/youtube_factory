@@ -283,3 +283,97 @@ def test_idle_window_has_no_running_animations(qtbot, window):
     qtbot.wait(100)
     assert not window.analysis.stepper._timer.isActive()
     assert not window.stack._fade.running
+
+
+# --- video clips -------------------------------------------------------------------
+def open_url_results(qtbot, win):
+    win.controller.source = FakeSource(error="")
+    win.controller.ensure_tools = lambda progress, cancelled: None
+    win.home.url_edit.setText("https://youtu.be/dQw4w9WgXcQ")
+    with qtbot.waitSignal(win.controller.analysis_finished, timeout=15000):
+        win.home.create_btn.click()
+
+
+def test_demo_results_cannot_download_clips(qtbot, window):
+    run_demo(qtbot, window)
+    assert not window.results.clips_btn.isEnabled()
+    assert not window.results._cards[0].clip_btn.isEnabled()
+
+
+def test_download_one_clip_shows_progress_then_done(qtbot, window, tmp_path):
+    open_url_results(qtbot, window)
+    seen = []
+
+    def fake_maker(req, progress, cancelled):
+        progress(0.5)
+        seen.append(req)
+        return tmp_path / f"clip{req.index}.mp4"
+
+    window.controller.clip_maker = fake_maker
+    card = window.results._cards[1]
+    assert card.clip_btn.isEnabled() and card.clip_state == "idle"
+    with qtbot.waitSignal(window.controller.clips_finished, timeout=5000):
+        card.clip_btn.click()
+    assert len(seen) == 1 and seen[0].start_sec == card.short.start_sec
+    assert card.clip_state == "done" and "clip1.mp4" in card.clip_label.text()
+    assert not card.open_btn.isHidden()
+    others = [c for c in window.results._cards if c is not card]
+    assert all(c.clip_state == "idle" for c in others)
+    assert window.results.clips_btn.text() == ru.BTN_MAKE_ALL
+    assert window.toast.text().startswith("Готово")
+
+
+def test_selected_cards_are_downloaded_and_failures_are_explained(qtbot, window, tmp_path):
+    open_url_results(qtbot, window)
+    from youtube_factory.services.clipper import ClipError
+
+    def fake_maker(req, progress, cancelled):
+        if req.index == 2:  # second request of the batch = third card
+            raise ClipError("clip_download_failed")
+        return tmp_path / "ok.mp4"
+
+    window.controller.clip_maker = fake_maker
+    cards = window.results._cards
+    cards[0].select_box.setChecked(True)
+    cards[2].select_box.setChecked(True)
+    assert window.results.clips_btn.text() == ru.BTN_MAKE_SELECTED
+    with qtbot.waitSignal(window.controller.clips_finished, timeout=5000):
+        window.results.clips_btn.click()
+    assert cards[0].clip_state == "done"
+    assert cards[2].clip_state == "failed"
+    assert cards[2].clip_label.text() == ru.CLIP_FAILED.format(reason=ru.ERR_CLIP_DOWNLOAD)
+    assert cards[1].clip_state == "idle"
+    assert window.results.status_label.text().startswith("Готово 1 из 2")
+
+
+def test_stop_button_cancels_the_batch(qtbot, window):
+    import threading
+
+    open_url_results(qtbot, window)
+    gate = threading.Event()
+
+    def slow_maker(req, progress, cancelled):
+        gate.wait(5)
+        from youtube_factory.services.clipper import ClipCancelled
+
+        if cancelled():
+            raise ClipCancelled
+        return None
+
+    window.controller.clip_maker = slow_maker
+    window.results.clips_btn.click()
+    qtbot.waitUntil(lambda: window.controller.clips_running, timeout=2000)
+    assert window.results.clips_btn.text() == ru.BTN_CANCEL_CLIPS
+    with qtbot.waitSignal(window.controller.clips_finished, timeout=5000):
+        window.results.clips_btn.click()  # now acts as "stop"
+        gate.set()
+    assert all(c.clip_state == "idle" for c in window.results._cards)
+    assert "Остановлено" in window.results.status_label.text()
+
+
+def test_clip_settings_persist(window, tmp_path):
+    view = window.settings_view
+    view.style_combo.setCurrentIndex(view.style_combo.findData("crop"))
+    assert window.controller.settings.clip_style == "crop"
+    assert SettingsStore(tmp_path / "s.json").load().clip_style == "crop"
+    assert view.clips_dir_edit.text().endswith("YouTube Factory")

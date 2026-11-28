@@ -135,3 +135,11 @@ def test_failed_tool_download_fails_every_clip_with_a_clear_reason(qtbot, contro
     assert preparing == [("ffmpeg", 0.3)]
     assert failed == [ru.ERR_TOOLS_DOWNLOAD] * 2
     assert blocker.args[:3] == [0, 2, False]
+
+
+def test_demo_mode_never_makes_clips_even_with_a_real_video_id(controller):
+    from youtube_factory.models import AnalysisMode
+
+    assert not controller.can_make_clips(VIDEO, AnalysisMode.DEMO)
+    assert controller.start_clips(VIDEO, make_shorts(1), AnalysisMode.DEMO) is False
+    assert not controller.clips_running

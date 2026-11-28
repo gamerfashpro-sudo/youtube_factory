@@ -13,7 +13,7 @@ from youtube_factory.ui.widgets.common import make_label, set_paragraph
 from youtube_factory.ui.widgets.controls import CheckPill, Chip, GlassButton, icon_button
 from youtube_factory.ui.widgets.fields import GlassLineEdit, GlassTextEdit
 from youtube_factory.ui.widgets.glass import GlassPanel
-from youtube_factory.ui.widgets.viz import ScoreRing, TimelineBar
+from youtube_factory.ui.widgets.viz import ProgressLine, ScoreRing, TimelineBar
 
 
 class ShortCard(GlassPanel):
@@ -22,10 +22,13 @@ class ShortCard(GlassPanel):
     favorite_toggled = Signal(object)
     delete_requested = Signal(object)
     selection_changed = Signal()
+    make_clip_requested = Signal(object)
+    open_folder_requested = Signal()
 
     def __init__(self, short: Short, total_sec: float = 0.0, parent: QWidget | None = None) -> None:
         super().__init__(parent, hoverable=True)
         self.short = short
+        self.clip_state = "idle"
         self._total = total_sec
         self.setMinimumWidth(420)
         root = QVBoxLayout(self)
@@ -91,17 +94,41 @@ class ShortCard(GlassPanel):
         actions = QHBoxLayout(self.actions)
         actions.setContentsMargins(0, 6, 0, 0)
         actions.setSpacing(6)
-        self.copy_btn = GlassButton(ru.BTN_COPY, "secondary", "copy", ru.TIP_COPY, height=36)
-        self.edit_btn = GlassButton(ru.BTN_EDIT, "ghost", "edit", ru.TIP_EDIT, height=36)
+        self.clip_btn = GlassButton(
+            ru.BTN_MAKE_CLIP, "primary", "film", ru.TIP_MAKE_CLIP, height=36
+        )
+        # Icon-only so the whole row fits a two-column card at the minimum window width.
+        self.copy_btn = icon_button("copy", ru.TIP_COPY)
+        self.edit_btn = icon_button("edit", ru.TIP_EDIT)
         self.fav_btn = icon_button("star", ru.TIP_FAVORITE)
         self.delete_btn = icon_button("trash", ru.TIP_DELETE, "danger")
-        for b in (self.copy_btn, self.edit_btn):
+        for b in (self.clip_btn, self.copy_btn, self.edit_btn):
             actions.addWidget(b)
         actions.addStretch(1)
         actions.addWidget(self.fav_btn)
         actions.addWidget(self.delete_btn)
         root.addWidget(self.actions)
 
+        # Status of the video clip for this Short (hidden until a download starts).
+        self.clip_box = QWidget()
+        clip = QVBoxLayout(self.clip_box)
+        clip.setContentsMargins(0, 2, 0, 0)
+        clip.setSpacing(6)
+        clip_row = QHBoxLayout()
+        clip_row.setSpacing(8)
+        self.clip_label = make_label(role="small")
+        self.clip_label.setMinimumHeight(30)  # same row height with or without the folder button
+        self.open_btn = GlassButton(ru.BTN_OPEN_CLIPS, "ghost", "folder", height=30)
+        clip_row.addWidget(self.clip_label, 1)
+        clip_row.addWidget(self.open_btn)
+        clip.addLayout(clip_row)
+        self.clip_bar = ProgressLine()
+        clip.addWidget(self.clip_bar)
+        self.clip_box.hide()
+        root.addWidget(self.clip_box)
+
+        self.clip_btn.clicked.connect(lambda: self.make_clip_requested.emit(self.short))
+        self.open_btn.clicked.connect(self.open_folder_requested)
         self.copy_btn.clicked.connect(lambda: self.copy_requested.emit(self.short))
         self.edit_btn.clicked.connect(self._start_edit)
         self.cancel_btn.clicked.connect(self._stop_edit)
@@ -125,6 +152,19 @@ class ShortCard(GlassPanel):
         set_paragraph(self.reason_label, f"{ru.LABEL_REASON}: {s.reason}", 135)
         self.fav_btn.set_active(s.is_favorite, animate=animate_fav)
         self.fav_btn.setToolTip(ru.TIP_UNFAVORITE if s.is_favorite else ru.TIP_FAVORITE)
+
+    def set_clip_state(self, state: str, text: str = "", fraction: float = 0.0) -> None:
+        """state: idle, queued, working, done or failed."""
+        self.clip_box.setVisible(state != "idle")
+        self.clip_label.setText(text)
+        self.clip_label.setProperty("role", "error" if state == "failed" else "small")
+        self.clip_label.style().unpolish(self.clip_label)
+        self.clip_label.style().polish(self.clip_label)
+        self.clip_bar.kind = {"done": "done", "failed": "failed"}.get(state, "work")
+        self.clip_bar.set_value(1.0 if state == "done" else fraction, animate=state == "working")
+        self.open_btn.setVisible(state == "done")
+        self.clip_btn.setEnabled(state not in ("queued", "working"))
+        self.clip_state = state
 
     def reveal(self, delay_ms: int) -> None:
         """Fade the card in after a short delay. The effect is removed when done."""

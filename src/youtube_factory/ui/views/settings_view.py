@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QVBoxLayout, QWidget
 from youtube_factory import __version__
 from youtube_factory import strings_ru as ru
 from youtube_factory.app.controller import AppController
-from youtube_factory.data.paths import data_dir
+from youtube_factory.data.paths import data_dir, default_clips_dir
 from youtube_factory.ui.motion import motion
 from youtube_factory.ui.widgets.common import make_label, set_paragraph, transparent_scroll
 from youtube_factory.ui.widgets.controls import GlassButton, Segmented, Switch
@@ -80,6 +80,26 @@ class SettingsView(QWidget):
         look.add_row(ru.SETTINGS_ANIMATIONS, self.anim_switch, ru.SETTINGS_ANIMATIONS_HINT)
         layout.addWidget(look)
 
+        clips = Shelf(ru.SETTINGS_CLIPS)
+        self.style_combo = Segmented()
+        for key, title in (
+            ("blur", ru.CLIP_STYLE_BLUR),
+            ("crop", ru.CLIP_STYLE_CROP),
+            ("fit", ru.CLIP_STYLE_FIT),
+        ):
+            self.style_combo.addItem(title, key)
+        clips.add_row(ru.SETTINGS_CLIP_STYLE, self.style_combo, ru.SETTINGS_CLIP_STYLE_HINT)
+        self.clips_dir_edit = GlassLineEdit(ru.EXPORT_DIR_PLACEHOLDER, "folder", height=42)
+        self.clips_dir_edit.setReadOnly(True)
+        self.clips_dir_btn = GlassButton(ru.BTN_CHOOSE_FOLDER, "secondary")
+        clips.body.addWidget(make_label(ru.SETTINGS_CLIPS_DIR, role="h3"))
+        clips_pick = QHBoxLayout()
+        clips_pick.setSpacing(8)
+        clips_pick.addWidget(self.clips_dir_edit, 1)
+        clips_pick.addWidget(self.clips_dir_btn)
+        clips.body.addLayout(clips_pick)
+        layout.addWidget(clips)
+
         files = Shelf(ru.SETTINGS_FILES)
         self.dir_edit = GlassLineEdit(ru.EXPORT_DIR_PLACEHOLDER, "folder", height=42)
         self.dir_edit.setReadOnly(True)
@@ -125,6 +145,8 @@ class SettingsView(QWidget):
         self.theme_combo.currentChanged.connect(self._theme_changed)
         self.anim_switch.toggled.connect(self._animations_changed)
         self.dir_btn.clicked.connect(self._choose_dir)
+        self.style_combo.currentChanged.connect(self._style_changed)
+        self.clips_dir_btn.clicked.connect(self._choose_clips_dir)
         self.data_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(data_dir())))
         )
@@ -138,6 +160,8 @@ class SettingsView(QWidget):
         self.anim_switch.setChecked(s.animations)
         self.anim_switch.blockSignals(False)
         self.dir_edit.setText(s.export_dir)
+        self.style_combo.set_index_silently(max(0, self.style_combo.findData(s.clip_style)))
+        self.clips_dir_edit.setText(s.clips_dir or str(default_clips_dir()))
 
     def _theme_changed(self) -> None:
         theme = self.theme_combo.currentData()
@@ -147,6 +171,20 @@ class SettingsView(QWidget):
     def _animations_changed(self, on: bool) -> None:
         motion.enabled = on
         self._controller.update_settings(replace(self._controller.settings, animations=on))
+        self.toast_requested.emit(ru.SETTINGS_SAVED, False)
+
+    def _style_changed(self) -> None:
+        style = self.style_combo.currentData()
+        self._controller.update_settings(replace(self._controller.settings, clip_style=style))
+        self.toast_requested.emit(ru.SETTINGS_SAVED, False)
+
+    def _choose_clips_dir(self) -> None:
+        start = self._controller.clips_folder()
+        folder = QFileDialog.getExistingDirectory(self, ru.CHOOSE_FOLDER_TITLE, start)
+        if not folder:
+            return
+        self.clips_dir_edit.setText(folder)
+        self._controller.update_settings(replace(self._controller.settings, clips_dir=folder))
         self.toast_requested.emit(ru.SETTINGS_SAVED, False)
 
     def _choose_dir(self) -> None:

@@ -142,12 +142,15 @@ class AppController(QObject):
         return self.settings.clips_dir or str(default_clips_dir())
 
     @staticmethod
-    def can_make_clips(video: VideoInfo) -> bool:
-        return bool(video.video_id and video.url)
+    def can_make_clips(video: VideoInfo, mode: AnalysisMode = AnalysisMode.MANUAL) -> bool:
+        """The demo video carries a real video id but its timings are invented: never cut it."""
+        return mode != AnalysisMode.DEMO and bool(video.video_id and video.url)
 
-    def start_clips(self, video: VideoInfo, shorts: list[Short]) -> bool:
+    def start_clips(
+        self, video: VideoInfo, shorts: list[Short], mode: AnalysisMode = AnalysisMode.MANUAL
+    ) -> bool:
         """Make vertical videos for the given Shorts. Returns False if nothing was started."""
-        if self.clips_running or not shorts or not self.can_make_clips(video):
+        if self.clips_running or not shorts or not self.can_make_clips(video, mode):
             return False
         folder = self.clips_folder()
         from pathlib import Path
