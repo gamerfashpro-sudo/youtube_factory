@@ -377,3 +377,37 @@ def test_clip_settings_persist(window, tmp_path):
     assert window.controller.settings.clip_style == "crop"
     assert SettingsStore(tmp_path / "s.json").load().clip_style == "crop"
     assert view.clips_dir_edit.text().endswith("YouTube Factory")
+
+
+# --- glow ---------------------------------------------------------------------------
+def test_primary_button_glows_and_follows_its_state(qtbot):
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    from youtube_factory.ui.widgets.controls import GlassButton
+    from youtube_factory.ui.widgets.glow import GlowHalo
+
+    host = QWidget()
+    lay = QVBoxLayout(host)
+    btn = GlassButton("Ок", "primary")
+    other = GlassButton("Нет", "secondary")
+    lay.addWidget(btn)
+    lay.addWidget(other)
+    qtbot.addWidget(host)
+    host.show()
+
+    halo = btn._halo
+    assert isinstance(halo, GlowHalo) and halo.isVisible()
+    assert other._halo is None  # only primary buttons glow
+    assert halo.geometry().contains(btn.geometry())
+
+    btn.setEnabled(False)
+    assert not halo.isVisible()
+    btn.setEnabled(True)
+    assert halo.isVisible()
+    btn.variant = "secondary"
+    assert not halo.isVisible()
+    btn.variant = "primary"
+    assert halo.isVisible()
+
+    btn.deleteLater()
+    qtbot.waitUntil(lambda: not host.findChildren(GlowHalo), timeout=2000)

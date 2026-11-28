@@ -23,6 +23,7 @@ from youtube_factory.ui.icons import paint_icon
 from youtube_factory.ui.motion import Tween, mix, with_alpha
 from youtube_factory.ui.theme import R_CONTROL, theme
 from youtube_factory.ui.widgets.glass import paint_glass
+from youtube_factory.ui.widgets.glow import GlowHalo
 
 ICON = 18
 GAP = 8
@@ -42,7 +43,8 @@ class GlassButton(QAbstractButton):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.variant = variant
+        self._variant = variant
+        self._halo: GlowHalo | None = None
         self._icon = icon
         self._square = square
         self._height = 36 if square else height
@@ -53,12 +55,45 @@ class GlassButton(QAbstractButton):
             self.setToolTip(tooltip)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-        self._hover = Tween(self)
-        self._press = Tween(self)
+        self._hover = Tween(self, on_change=self._repaint_all)
+        self._press = Tween(self, on_change=self._repaint_all)
         self._pop = Tween(self)
         self.setFixedHeight(self._height)
 
     # --- state ---------------------------------------------------------------
+    @property
+    def variant(self) -> str:
+        return self._variant
+
+    @variant.setter
+    def variant(self, value: str) -> None:
+        self._variant = value
+        self._sync_halo()
+        self.update()
+
+    def _repaint_all(self) -> None:
+        self.update()
+        if self._halo is not None and self._halo.isVisible():
+            self._halo.update()
+
+    def _sync_halo(self) -> None:
+        """Primary buttons glow; the halo is made once the button has a parent."""
+        parent = self.parentWidget()
+        if self._variant != "primary" and self._halo is None:
+            return
+        if parent is None:
+            return
+        if self._halo is None or self._halo.parentWidget() is not parent:
+            if self._halo is not None:
+                self._halo.deleteLater()
+            self._halo = GlowHalo(self, parent)
+        else:
+            self._halo.sync()
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self._sync_halo()
+        super().showEvent(event)
+
     def set_active(self, active: bool, animate: bool = False) -> None:
         """Highlight the button (used by the favourite star)."""
         changed = active != self._active

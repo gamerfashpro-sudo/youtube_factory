@@ -10,6 +10,7 @@ from youtube_factory.ui.fonts import font
 from youtube_factory.ui.icons import paint_icon
 from youtube_factory.ui.motion import Tween, mix, with_alpha
 from youtube_factory.ui.theme import R_FIELD, theme
+from youtube_factory.ui.widgets.glow import paint_inner_glow
 
 
 def _paint_field(p: QPainter, rect: QRectF, focus: float, radius: float) -> None:
@@ -22,6 +23,8 @@ def _paint_field(p: QPainter, rect: QRectF, focus: float, radius: float) -> None
     p.setPen(QPen(mix(base, pal.accent_hi, focus), 1.0 + focus * 0.8))
     p.setBrush(Qt.BrushStyle.NoBrush)
     p.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
+    if focus > 0.01:
+        paint_inner_glow(p, rect, radius, pal.accent_hi, 12, int((70 if pal.dark else 55) * focus))
 
 
 class GlassLineEdit(QLineEdit):

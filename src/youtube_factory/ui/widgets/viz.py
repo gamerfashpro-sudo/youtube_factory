@@ -10,6 +10,7 @@ from youtube_factory.ui.fonts import font
 from youtube_factory.ui.icons import paint_icon
 from youtube_factory.ui.motion import Tween, mix, with_alpha
 from youtube_factory.ui.theme import theme
+from youtube_factory.ui.widgets.glow import paint_glow
 
 
 class ScoreRing(QWidget):
@@ -38,12 +39,18 @@ class ScoreRing(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         w = 4.0
-        r = QRectF(self.rect()).adjusted(w / 2 + 1, w / 2 + 1, -w / 2 - 1, -w / 2 - 1)
+        inset = w / 2 + 5  # leave room for the glow around the arc
+        r = QRectF(self.rect()).adjusted(inset, inset, -inset, -inset)
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.setPen(QPen(pal.track, w))
         p.drawEllipse(r)
         sweep = -360.0 * (self._score / 100.0) * self._fill.value
         if sweep:
+            for extra, alpha in ((8.0, 26), (4.0, 46)):  # bloom under the arc
+                glow = QPen(with_alpha(pal.amber, alpha if pal.dark else alpha // 2), w + extra)
+                glow.setCapStyle(Qt.PenCapStyle.RoundCap)
+                p.setPen(glow)
+                p.drawArc(r, 90 * 16, int(sweep * 16))
             pen = QPen(pal.amber, w)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             p.setPen(pen)
@@ -247,7 +254,7 @@ class ProgressLine(QWidget):
         super().__init__(parent)
         self._value = Tween(self)
         self.kind = "work"  # work, done, failed
-        self.setFixedHeight(6)
+        self.setFixedHeight(12)  # 6 px bar with room for its glow
 
     def set_value(self, fraction: float, animate: bool = True) -> None:
         fraction = max(0.0, min(1.0, fraction))
@@ -263,14 +270,17 @@ class ProgressLine(QWidget):
         pal = theme.p
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        r = QRectF(self.rect())
+        r = QRectF(0, 3, self.width(), 6)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(pal.track)
         p.drawRoundedRect(r, 3, 3)
         width = r.width() * self._value.value
         if width < 1:
             return
-        fill = QRectF(0, 0, max(width, 6.0), r.height())
+        fill = QRectF(0, 3, max(width, 6.0), 6)
+        tone = {"failed": pal.danger, "done": pal.success}.get(self.kind, pal.accent_hi)
+        paint_glow(p, fill, 3, tone, 3, 120 if pal.dark else 80)
+        p.setPen(Qt.PenStyle.NoPen)
         if self.kind == "failed":
             p.setBrush(pal.danger)
         elif self.kind == "done":
