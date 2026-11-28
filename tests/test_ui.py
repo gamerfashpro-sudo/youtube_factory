@@ -83,9 +83,9 @@ def test_card_actions(qtbot, window, tmp_path):
 
     card.fav_btn.click()
     assert short.is_favorite
-    view.fav_filter.setChecked(True)
+    view.fav_filter.setCurrentIndex(1)
     assert [c for c in view._cards if not c.isHidden()] == [card]
-    view.fav_filter.setChecked(False)
+    view.fav_filter.setCurrentIndex(0)
 
     card.edit_btn.click()
     card.title_edit.setText("Новое название")
@@ -133,7 +133,6 @@ def test_history_open_and_delete(qtbot, window, monkeypatch):
     run_demo(qtbot, window)
     window.show_page(mw.PAGE_HISTORY)
     item = window.controller.history()[0]
-    monkeypatch.setattr(results_view, "confirm", lambda *a: True)
     from youtube_factory.ui.views import history_view
 
     monkeypatch.setattr(history_view, "confirm", lambda *a: True)
@@ -174,3 +173,66 @@ def test_results_use_two_columns_on_wide_window(qtbot, window):
     window.resize(900, 700)
     qtbot.wait(150)
     assert window.results._columns == 1
+
+
+@pytest.fixture
+def motion_restored():
+    from youtube_factory.ui.motion import motion
+
+    before = motion.enabled
+    yield motion
+    motion.enabled = before
+
+
+def test_animations_switch_persists_and_disables_motion(window, tmp_path, motion_restored):
+    assert window.settings_view.anim_switch.isChecked()
+    window.settings_view.anim_switch.setChecked(False)
+    assert motion_restored.enabled is False
+    assert SettingsStore(tmp_path / "s.json").load().animations is False
+
+
+def test_tween_jumps_when_motion_is_off(window, motion_restored):
+    from youtube_factory.ui.motion import Tween
+
+    motion_restored.enabled = False
+    tween = Tween(window)
+    tween.go(1.0, 500)
+    assert tween.value == 1.0 and not tween.running
+
+
+def test_stepper_spinner_runs_only_while_visible(qtbot, window):
+    stepper = window.analysis.stepper
+    window.show_page(mw.PAGE_HOME)
+    qtbot.wait(50)
+    assert not stepper._timer.isActive()
+    window.show_page(mw.PAGE_ANALYSIS)
+    stepper.set_state(1)
+    assert stepper._timer.isActive()
+    stepper.set_state(1, failed=True)
+    assert not stepper._timer.isActive()
+
+
+def test_segmented_api_matches_combo_box(qtbot):
+    from youtube_factory.ui.widgets.controls import Segmented
+
+    seg = Segmented()
+    qtbot.addWidget(seg)
+    seg.addItem("A", "a")
+    seg.addItem("B", "b")
+    changes = []
+    seg.currentChanged.connect(changes.append)
+    seg.setCurrentIndex(1)
+    assert seg.currentData() == "b" and seg.findData("a") == 0 and changes == [1]
+
+
+def test_pages_are_transparent_so_backdrop_shows(window):
+    # Regression: QScrollArea.setWidget re-enabled auto-fill and painted grey pages.
+    for scroll in window.findChildren(type(window.results.scroll)):
+        assert not scroll.viewport().autoFillBackground()
+        assert not scroll.widget().autoFillBackground()
+
+
+def test_idle_window_has_no_running_animations(qtbot, window):
+    qtbot.wait(100)
+    assert not window.analysis.stepper._timer.isActive()
+    assert not window.stack._fade.running

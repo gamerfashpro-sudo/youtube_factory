@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from platformdirs import user_data_dir
@@ -30,6 +31,14 @@ def log_dir() -> Path:
     path = data_dir() / "logs"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def resource_dir() -> Path:
+    """Folder with bundled resources (icon, fonts) in a checkout or a PyInstaller bundle."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        return Path(bundle) / "youtube_factory" / "resources"
+    return Path(__file__).resolve().parents[1] / "resources"
 
 
 def long_path(path: Path) -> str:

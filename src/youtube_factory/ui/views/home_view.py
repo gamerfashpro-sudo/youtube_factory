@@ -1,61 +1,94 @@
-"""Home screen: URL input, primary actions and recent analyses."""
+"""Home screen: URL input, two quick actions and recent analyses."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from youtube_factory import strings_ru as ru
 from youtube_factory.app.controller import AppController
-from youtube_factory.ui.widgets.common import make_button, make_label
+from youtube_factory.ui.widgets.common import make_label, transparent_scroll
+from youtube_factory.ui.widgets.controls import ActionTile, GlassButton
+from youtube_factory.ui.widgets.fields import GlassLineEdit
+from youtube_factory.ui.widgets.glass import GlassPanel
 from youtube_factory.ui.widgets.history_row import HistoryRow
+
+CONTENT_MAX = 860
 
 
 class HomeView(QWidget):
     open_analysis = Signal(int)
     paste_transcript_requested = Signal(str)  # current URL text (may be empty)
+    history_requested = Signal()
 
     def __init__(self, controller: AppController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._controller = controller
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(48, 40, 48, 32)
-        outer.setSpacing(14)
+        host = QWidget()
+        page = QHBoxLayout(host)
+        page.setContentsMargins(36, 40, 36, 32)
+        column = QWidget()
+        column.setMaximumWidth(CONTENT_MAX)
+        page.addWidget(column, 1)
+        page.addStretch(0)
+        outer = QVBoxLayout(column)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        outer.addWidget(make_label(ru.APP_NAME_RU, h1=True))
-        outer.addWidget(make_label(ru.HOME_TAGLINE, h2=True))
-        outer.addWidget(make_label(ru.HOME_SUBTITLE, wrap=True, muted=True))
-        outer.addSpacing(10)
+        outer.addWidget(make_label(ru.APP_NAME_RU, role="hero"))
+        outer.addSpacing(8)
+        outer.addWidget(make_label(ru.HOME_TAGLINE, wrap=True, role="h2"))
+        outer.addSpacing(6)
+        outer.addWidget(make_label(ru.HOME_SUBTITLE, wrap=True, role="muted"))
+        outer.addSpacing(26)
 
-        self.url_edit = QLineEdit()
-        self.url_edit.setPlaceholderText(ru.URL_PLACEHOLDER)
-        self.url_edit.setProperty("big", True)
+        # The input "lens": a large glass bar with the main action inside it.
+        lens = GlassPanel(radius=24, strength=1.2)
+        lens_row = QHBoxLayout(lens)
+        lens_row.setContentsMargins(10, 10, 10, 10)
+        lens_row.setSpacing(8)
+        self.url_edit = GlassLineEdit(ru.URL_PLACEHOLDER, "link", height=48)
         self.url_edit.setClearButtonEnabled(True)
-        outer.addWidget(self.url_edit)
-        self.error_label = make_label(wrap=True, error=True)
+        self.create_btn = GlassButton(ru.BTN_CREATE, "primary", "sparkle", height=48)
+        lens_row.addWidget(self.url_edit, 1)
+        lens_row.addWidget(self.create_btn)
+        outer.addWidget(lens)
+        outer.addSpacing(8)
+        self.error_label = make_label(wrap=True, role="error")
         self.error_label.hide()
         outer.addWidget(self.error_label)
+        outer.addSpacing(14)
 
-        buttons = QHBoxLayout()
-        self.create_btn = make_button(ru.BTN_CREATE, primary=True)
-        self.example_btn = make_button(ru.BTN_EXAMPLE)
-        self.paste_btn = make_button(ru.BTN_PASTE_TRANSCRIPT)
-        for b in (self.create_btn, self.example_btn, self.paste_btn):
-            buttons.addWidget(b)
-        buttons.addStretch(1)
-        outer.addLayout(buttons)
-        outer.addSpacing(18)
+        tiles = QHBoxLayout()
+        tiles.setSpacing(14)
+        self.example_btn = ActionTile(ru.TILE_DEMO_TITLE, ru.TILE_DEMO_TEXT, "play")
+        self.paste_btn = ActionTile(ru.TILE_PASTE_TITLE, ru.TILE_PASTE_TEXT, "paste")
+        tiles.addWidget(self.example_btn, 1)
+        tiles.addWidget(self.paste_btn, 1)
+        outer.addLayout(tiles)
+        outer.addSpacing(34)
 
-        outer.addWidget(make_label(ru.RECENT_TITLE, h2=True))
+        head = QHBoxLayout()
+        head.addWidget(make_label(ru.RECENT_TITLE, role="h2"))
+        head.addStretch(1)
+        self.all_btn = GlassButton(ru.BTN_ALL_HISTORY, "ghost", "clock", height=36)
+        head.addWidget(self.all_btn)
+        outer.addLayout(head)
+        outer.addSpacing(10)
         self.recent_box = QVBoxLayout()
-        self.recent_box.setSpacing(8)
+        self.recent_box.setSpacing(10)
         outer.addLayout(self.recent_box)
         outer.addStretch(1)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(transparent_scroll(host))
 
         self.create_btn.clicked.connect(self._create)
         self.url_edit.returnPressed.connect(self._create)
         self.example_btn.clicked.connect(self._example)
         self.paste_btn.clicked.connect(lambda: self.paste_transcript_requested.emit(self._url()))
+        self.all_btn.clicked.connect(self.history_requested)
         self.url_edit.textChanged.connect(lambda _: self.error_label.hide())
         controller.history_changed.connect(self.refresh_recent)
         self.refresh_recent()
@@ -83,9 +116,10 @@ class HomeView(QWidget):
             item = self.recent_box.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        items = self._controller.history(limit=5)
+        items = self._controller.history(limit=3)
+        self.all_btn.setVisible(bool(items))
         if not items:
-            empty = make_label(ru.RECENT_EMPTY, wrap=True, muted=True)
+            empty = make_label(ru.RECENT_EMPTY, wrap=True, role="muted")
             empty.setAlignment(Qt.AlignmentFlag.AlignLeft)
             self.recent_box.addWidget(empty)
             return

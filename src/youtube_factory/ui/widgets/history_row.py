@@ -3,39 +3,48 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from youtube_factory import strings_ru as ru
 from youtube_factory.data.repositories import HistoryItem
 from youtube_factory.models import AnalysisMode
-from youtube_factory.ui.widgets.common import make_button, make_card, make_label
+from youtube_factory.ui.widgets.common import make_label
+from youtube_factory.ui.widgets.controls import Chip, GlassButton, icon_button
+from youtube_factory.ui.widgets.glass import GlassPanel
 
 
-class HistoryRow(QWidget):
+class HistoryRow(GlassPanel):
     open_requested = Signal(int)
     delete_requested = Signal(int)
 
     def __init__(self, item: HistoryItem, deletable: bool, parent: QWidget | None = None):
-        super().__init__(parent)
+        super().__init__(parent, radius=18, hoverable=True)
         self.item = item
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        card = make_card()
-        outer.addWidget(card)
-        row = QHBoxLayout(card)
-        row.setContentsMargins(16, 12, 16, 12)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(18, 14, 14, 14)
+        row.setSpacing(12)
         text = QVBoxLayout()
-        title = item.title or ru.DEFAULT_VIDEO_TITLE
-        text.addWidget(make_label(title, wrap=True))
+        text.setSpacing(8)
+        text.addWidget(make_label(item.title or ru.DEFAULT_VIDEO_TITLE, wrap=True, role="h3"))
+        chips = QHBoxLayout()
+        chips.setSpacing(6)
         mode = ru.MODE_DEMO if item.mode == AnalysisMode.DEMO else ru.MODE_MANUAL
-        count = ru.SHORTS_COUNT.format(n=item.shorts_count)
-        meta = f"{item.created_at:%d.%m.%Y %H:%M} · {mode} · {count}"
-        text.addWidget(make_label(meta, muted=True))
+        chips.addWidget(Chip(f"{item.created_at:%d.%m.%Y %H:%M}", "meta", "clock"))
+        chips.addWidget(Chip(mode, "meta"))
+        chips.addWidget(Chip(ru.SHORTS_COUNT.format(n=item.shorts_count), "tag", "film"))
+        chips.addStretch(1)
+        text.addLayout(chips)
         row.addLayout(text, 1)
-        open_btn = make_button(ru.BTN_OPEN)
-        open_btn.clicked.connect(lambda: self.open_requested.emit(item.id))
-        row.addWidget(open_btn)
+        self.open_btn = GlassButton(ru.BTN_OPEN, "secondary", "play")
+        self.open_btn.clicked.connect(lambda: self.open_requested.emit(item.id))
+        row.addWidget(self.open_btn)
         if deletable:
-            delete_btn = make_button(ru.BTN_DELETE, ru.TIP_DELETE, danger=True)
-            delete_btn.clicked.connect(lambda: self.delete_requested.emit(item.id))
-            row.addWidget(delete_btn)
+            self.delete_btn = icon_button("trash", ru.TIP_DELETE, "danger")
+            self.delete_btn.clicked.connect(lambda: self.delete_requested.emit(item.id))
+            row.addWidget(self.delete_btn)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
+        if self.rect().contains(event.position().toPoint()):
+            self.open_requested.emit(self.item.id)
+        super().mouseReleaseEvent(event)

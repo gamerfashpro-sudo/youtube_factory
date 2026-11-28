@@ -21,12 +21,14 @@ THEMES = ("dark", "light", "system")
 class Settings:
     theme: str = "dark"
     export_dir: str = ""
+    animations: bool = True
     window_width: int = 1200
     window_height: int = 800
 
     def normalized(self) -> Settings:
         if self.theme not in THEMES:
             self.theme = "dark"
+        self.animations = bool(self.animations)
         self.window_width = max(900, min(7680, int(self.window_width)))
         self.window_height = max(600, min(4320, int(self.window_height)))
         return self

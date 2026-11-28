@@ -79,11 +79,17 @@ def run(argv: list[str]) -> int:
     if not smoke and _notify_running_instance():
         return 0
 
+    from youtube_factory.ui.fonts import app_font, load_fonts
     from youtube_factory.ui.main_window import MainWindow
+    from youtube_factory.ui.theme import theme
+
+    load_fonts()
+    app.setFont(app_font())
 
     repo, db_ok = _open_repository()
     controller = AppController(repo, SettingsStore(paths.settings_path()))
     window = MainWindow(controller)
+    theme.watch_system()
 
     server = None
     if not smoke:

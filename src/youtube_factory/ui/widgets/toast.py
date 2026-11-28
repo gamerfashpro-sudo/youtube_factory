@@ -1,66 +1,86 @@
-"""Non-blocking toast notification shown at the bottom of the window."""
+"""Non-blocking notification pill that slides up from the bottom edge of the window."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
-from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QWidget
+from PySide6.QtCore import QRectF, QSize, Qt, QTimer
+from PySide6.QtGui import QFontMetrics, QPainter
+from PySide6.QtWidgets import QWidget
 
-from youtube_factory.ui.theme import Palette
+from youtube_factory.ui.fonts import font
+from youtube_factory.ui.icons import paint_icon
+from youtube_factory.ui.motion import Tween, with_alpha
+from youtube_factory.ui.theme import theme
+from youtube_factory.ui.widgets.glass import paint_glass
+
+H = 48
 
 
-class Toast(QLabel):
+class Toast(QWidget):
     DURATION_MS = 3200
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setWordWrap(True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self._effect = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self._effect)
-        self._anim = QPropertyAnimation(self._effect, b"opacity", self)
-        self._anim.setDuration(220)
-        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._text = ""
+        self._error = False
+        self._t = Tween(self, on_change=self._step)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
-        self._timer.timeout.connect(self._fade_out)
-        self._palette: Palette | None = None
+        self._timer.timeout.connect(lambda: self._t.go(0.0, 260))
+        self.setFont(font(14, "medium"))
         self.hide()
 
-    def apply_palette(self, palette: Palette) -> None:
-        self._palette = palette
+    def text(self) -> str:
+        return self._text
 
     def show_message(self, text: str, error: bool = False) -> None:
-        p = self._palette
-        bg = (p.danger if error else p.accent) if p else "#7C5CFF"
-        self.setStyleSheet(
-            f"background: {bg}; color: #FFFFFF; border-radius: 12px; padding: 12px 20px;"
-            " font-weight: 600;"
-        )
-        self.setText(text)
-        self.setFixedWidth(min(520, max(240, self.parentWidget().width() - 80)))
-        self.adjustSize()
-        self.reposition()
+        self._text, self._error = text, error
+        avail = max(240, self.parentWidget().width() - 80)
+        fm = QFontMetrics(self.font())
+        shown = fm.elidedText(text, Qt.TextElideMode.ElideRight, avail - 80)
+        self._shown = shown
+        w = min(avail, fm.horizontalAdvance(shown) + 76)
+        self.resize(QSize(w, H))
         self.show()
         self.raise_()
-        self._anim.stop()
-        self._anim.setStartValue(self._effect.opacity())
-        self._anim.setEndValue(1.0)
-        self._anim.start()
+        self._t.go(1.0, 320)
         self._timer.start(self.DURATION_MS)
+        self._place()
+
+    def _step(self) -> None:
+        self._place()
+        if self._t.value <= 0.0 and not self._t.running:
+            self.hide()
+        self.update()
+
+    def _place(self) -> None:
+        parent = self.parentWidget()
+        rise = (1.0 - self._t.value) * 22
+        self.move((parent.width() - self.width()) // 2, int(parent.height() - H - 96 + rise))
 
     def reposition(self) -> None:
-        parent = self.parentWidget()
-        self.move((parent.width() - self.width()) // 2, parent.height() - self.height() - 28)
+        self._place()
 
-    def _fade_out(self) -> None:
-        self._anim.stop()
-        self._anim.setStartValue(self._effect.opacity())
-        self._anim.setEndValue(0.0)
-        self._anim.finished.connect(self._hide_after_fade)
-        self._anim.start()
-
-    def _hide_after_fade(self) -> None:
-        self._anim.finished.disconnect(self._hide_after_fade)
-        if self._effect.opacity() <= 0.01:
-            self.hide()
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+        pal = theme.p
+        p = QPainter(self)
+        p.setOpacity(self._t.value)
+        r = QRectF(self.rect())
+        paint_glass(
+            p,
+            r,
+            H / 2,
+            strength=2.6 if pal.dark else 1.6,
+            tint=with_alpha(pal.danger if self._error else pal.accent, 70),
+        )
+        color = pal.danger if self._error else pal.success
+        paint_icon(
+            p, "alert" if self._error else "check", QRectF(18, (H - 20) / 2, 20, 20), color, 2.0
+        )
+        p.setFont(self.font())
+        p.setPen(pal.text)
+        p.drawText(
+            QRectF(48, 0, r.width() - 60, H),
+            Qt.AlignmentFlag.AlignVCenter,
+            getattr(self, "_shown", self._text),
+        )

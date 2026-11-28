@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from youtube_factory import strings_ru as ru
 from youtube_factory.app.controller import AppController
-from youtube_factory.ui.views.results_view import confirm
-from youtube_factory.ui.widgets.common import make_label
+from youtube_factory.ui.widgets.common import make_label, transparent_scroll
+from youtube_factory.ui.widgets.dialogs import confirm
 from youtube_factory.ui.widgets.history_row import HistoryRow
 
 
@@ -19,39 +19,38 @@ class HistoryView(QWidget):
     def __init__(self, controller: AppController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._controller = controller
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(48, 40, 48, 24)
-        outer.setSpacing(14)
-        outer.addWidget(make_label(ru.HISTORY_TITLE, h1=True))
-        self.empty_label = make_label(ru.HISTORY_EMPTY, muted=True)
-        outer.addWidget(self.empty_label)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         host = QWidget()
-        self.rows = QVBoxLayout(host)
-        self.rows.setContentsMargins(0, 0, 0, 0)
-        self.rows.setSpacing(8)
-        self.rows.addStretch(1)
-        scroll.setWidget(host)
-        outer.addWidget(scroll, 1)
+        outer = QVBoxLayout(host)
+        outer.setContentsMargins(36, 40, 36, 28)
+        outer.setSpacing(0)
+        outer.addWidget(make_label(ru.HISTORY_TITLE, role="title"))
+        outer.addSpacing(18)
+        self.empty_label = make_label(ru.HISTORY_EMPTY, role="muted")
+        outer.addWidget(self.empty_label)
+        self.rows = QVBoxLayout()
+        self.rows.setSpacing(10)
+        outer.addLayout(self.rows)
+        outer.addStretch(1)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(transparent_scroll(host))
 
         controller.history_changed.connect(self.refresh)
         self.refresh()
 
     def refresh(self) -> None:
-        while self.rows.count() > 1:
+        while self.rows.count():
             item = self.rows.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         items = self._controller.history()
         self.empty_label.setVisible(not items)
-        for i, item in enumerate(items):
+        for item in items:
             row = HistoryRow(item, deletable=True)
             row.open_requested.connect(self.open_analysis)
             row.delete_requested.connect(self._delete)
-            self.rows.insertWidget(i, row)
+            self.rows.addWidget(row)
 
     def _delete(self, analysis_id: int) -> None:
         item = next((i for i in self._controller.history() if i.id == analysis_id), None)

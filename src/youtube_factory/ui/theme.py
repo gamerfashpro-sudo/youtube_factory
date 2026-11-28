@@ -1,138 +1,185 @@
-"""Colour palettes and the application stylesheet (dark, light, system)."""
+"""Design tokens: palettes, radii and the small global stylesheet.
+
+The look is built from a pre-rendered blurred backdrop and translucent "glass"
+panels painted with plain gradients. There is no real-time blur or drop shadow,
+so the interface stays cheap to repaint.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
+
+# Radii: larger surfaces are rounder, small controls are tighter.
+R_DOCK = 26
+R_PANEL = 20
+R_FIELD = 14
+R_CONTROL = 12
+
+
+def rgba(hex_: str, alpha: int = 255) -> QColor:
+    c = QColor(hex_)
+    c.setAlpha(alpha)
+    return c
 
 
 @dataclass(frozen=True)
+class Blob:
+    x: float  # centre as a fraction of window width
+    y: float  # centre as a fraction of window height
+    r: float  # radius as a fraction of the larger window side
+    color: str
+    alpha: int
+
+
+@dataclass(frozen=True, eq=False)
 class Palette:
-    bg: str
-    surface: str
-    surface_alt: str
-    border: str
-    text: str
-    text_muted: str
-    accent: str
-    accent_hover: str
-    accent_text: str
-    score: str
-    danger: str
+    name: str
+    dark: bool
+    base: QColor
+    blobs: tuple[Blob, ...]
+    glass_a: QColor  # fill at the top of a panel
+    glass_b: QColor  # fill at the bottom of a panel
+    stroke_hi: QColor  # lit edge (top left)
+    stroke_lo: QColor  # shaded edge (bottom right)
+    text: QColor
+    muted: QColor
+    faint: QColor
+    accent: QColor
+    accent_hi: QColor
+    accent_lo: QColor
+    on_accent: QColor
+    amber: QColor
+    danger: QColor
+    success: QColor
+    field: QColor
+    track: QColor
 
 
 DARK = Palette(
-    bg="#0A0A0B",
-    surface="#141416",
-    surface_alt="#1C1C20",
-    border="#2A2A30",
-    text="#F2F2F4",
-    text_muted="#9A9AA5",
-    accent="#7C5CFF",
-    accent_hover="#9179FF",
-    accent_text="#FFFFFF",
-    score="#FFB020",
-    danger="#FF6B6B",
+    name="dark",
+    dark=True,
+    base=rgba("#0A0A0C"),
+    blobs=(
+        Blob(0.10, 0.04, 0.62, "#7C5CFF", 120),
+        Blob(0.96, 0.12, 0.52, "#3552FF", 66),
+        Blob(0.86, 1.00, 0.62, "#FF8A3D", 44),
+        Blob(0.00, 1.00, 0.48, "#B03CFF", 42),
+    ),
+    glass_a=rgba("#FFFFFF", 24),
+    glass_b=rgba("#FFFFFF", 10),
+    stroke_hi=rgba("#FFFFFF", 92),
+    stroke_lo=rgba("#FFFFFF", 16),
+    text=rgba("#F5F5F9"),
+    muted=rgba("#A9A9BC"),
+    faint=rgba("#7C7C90"),
+    accent=rgba("#7C5CFF"),
+    accent_hi=rgba("#9A82FF"),
+    accent_lo=rgba("#6040F0"),
+    on_accent=rgba("#FFFFFF"),
+    amber=rgba("#FFB020"),
+    danger=rgba("#FF7083"),
+    success=rgba("#4ADE9A"),
+    field=rgba("#000000", 78),
+    track=rgba("#FFFFFF", 28),
 )
 
 LIGHT = Palette(
-    bg="#F6F6F9",
-    surface="#FFFFFF",
-    surface_alt="#EFEFF4",
-    border="#DADAE3",
-    text="#16161A",
-    text_muted="#6B6B78",
-    accent="#6A4BF0",
-    accent_hover="#7C60F5",
-    accent_text="#FFFFFF",
-    score="#D98200",
-    danger="#D93636",
+    name="light",
+    dark=False,
+    base=rgba("#EDECF6"),
+    blobs=(
+        Blob(0.08, 0.04, 0.65, "#9D88FF", 140),
+        Blob(0.96, 0.14, 0.55, "#7DB5FF", 120),
+        Blob(0.86, 1.00, 0.65, "#FFB47E", 120),
+    ),
+    glass_a=rgba("#FFFFFF", 176),
+    glass_b=rgba("#FFFFFF", 112),
+    stroke_hi=rgba("#FFFFFF", 240),
+    stroke_lo=rgba("#1E1B3A", 40),
+    text=rgba("#17161F"),
+    muted=rgba("#5A5870"),
+    faint=rgba("#8C8AA0"),
+    accent=rgba("#6A4BF0"),
+    accent_hi=rgba("#7D62F5"),
+    accent_lo=rgba("#5A3BE0"),
+    on_accent=rgba("#FFFFFF"),
+    amber=rgba("#D98200"),
+    danger=rgba("#D93646"),
+    success=rgba("#1E9E6A"),
+    field=rgba("#FFFFFF", 150),
+    track=rgba("#1E1B3A", 34),
 )
 
 
-def resolve_palette(theme: str) -> Palette:
-    if theme == "light":
-        return LIGHT
-    if theme == "system":
-        scheme = QApplication.styleHints().colorScheme()
-        return LIGHT if scheme == Qt.ColorScheme.Light else DARK
-    return DARK
+def _css(c: QColor) -> str:
+    return f"rgba({c.red()},{c.green()},{c.blue()},{c.alpha()})"
 
 
 def build_stylesheet(p: Palette) -> str:
+    handle = QColor(p.text)
+    handle.setAlpha(60)
     return f"""
-* {{ font-family: "Segoe UI Variable", "Segoe UI", sans-serif; font-size: 10pt; }}
-QMainWindow, QWidget#root, QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget {{
-    background: {p.bg}; color: {p.text};
+QToolTip {{
+    background: {_css(rgba("#1B1B22") if p.dark else rgba("#FFFFFF"))};
+    color: {_css(p.text)}; border: 1px solid {_css(p.stroke_lo)};
+    border-radius: 8px; padding: 6px 10px;
 }}
-QLabel {{ color: {p.text}; background: transparent; }}
-QLabel[muted="true"] {{ color: {p.text_muted}; }}
-QLabel[h1="true"] {{ font-size: 24pt; font-weight: 700; }}
-QLabel[h2="true"] {{ font-size: 15pt; font-weight: 600; }}
-QLabel[score="true"] {{ color: {p.score}; font-weight: 700; font-size: 13pt; }}
-QLabel[error="true"] {{ color: {p.danger}; }}
-QLabel[thumb="true"] {{
-    background: {p.surface_alt}; border-radius: 10px; color: {p.accent}; font-size: 28pt;
+QLabel {{ background: transparent; color: {_css(p.text)}; }}
+QLabel[role="muted"], QLabel[role="small"] {{ color: {_css(p.muted)}; }}
+QLabel[role="error"] {{ color: {_css(p.danger)}; }}
+QLabel[role="accent"] {{ color: {_css(p.accent_hi)}; }}
+QLineEdit, QPlainTextEdit {{
+    background: transparent; border: none; color: {_css(p.text)};
+    selection-background-color: {_css(p.accent)}; selection-color: white;
 }}
-QLabel[time="true"] {{ color: {p.accent_hover}; font-weight: 600; }}
-QFrame[card="true"] {{
-    background: {p.surface}; border: 1px solid {p.border}; border-radius: 14px;
-}}
-QFrame[nav="true"] {{ background: {p.surface}; border-right: 1px solid {p.border}; }}
-QPushButton {{
-    background: {p.surface_alt}; color: {p.text}; border: 1px solid {p.border};
-    border-radius: 10px; padding: 8px 16px;
-}}
-QPushButton:hover {{ border-color: {p.accent}; }}
-QPushButton:disabled {{ color: {p.text_muted}; }}
-QPushButton[primary="true"] {{
-    background: {p.accent}; color: {p.accent_text}; border: none; font-weight: 600;
-    padding: 12px 24px;
-}}
-QPushButton[primary="true"]:hover {{ background: {p.accent_hover}; }}
-QPushButton[nav="true"] {{
-    background: transparent; border: none; text-align: left; padding: 10px 14px;
-    border-radius: 10px;
-}}
-QPushButton[nav="true"]:checked {{ background: {p.surface_alt}; color: {p.accent_hover}; }}
-QPushButton[nav="true"]:hover {{ background: {p.surface_alt}; }}
-QPushButton[compact="true"] {{ padding: 6px 12px; }}
-QPushButton[danger="true"] {{ color: {p.danger}; }}
-QPushButton[fav="true"] {{ color: {p.score}; border-color: {p.score}; }}
-QLineEdit, QPlainTextEdit, QTextEdit, QComboBox {{
-    background: {p.surface}; color: {p.text}; border: 1px solid {p.border};
-    border-radius: 10px; padding: 8px 12px; selection-background-color: {p.accent};
-}}
-QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QComboBox:focus {{
-    border-color: {p.accent};
-}}
-QLineEdit[big="true"] {{ font-size: 13pt; padding: 14px 18px; border-radius: 14px; }}
-QComboBox QAbstractItemView {{
-    background: {p.surface}; color: {p.text}; selection-background-color: {p.accent};
-}}
-QCheckBox {{ color: {p.text}; spacing: 8px; }}
-QCheckBox::indicator {{
-    width: 18px; height: 18px; border-radius: 5px;
-    border: 1px solid {p.text_muted}; background: {p.surface};
-}}
-QCheckBox::indicator:hover {{ border-color: {p.accent}; }}
-QCheckBox::indicator:checked {{ background: {p.accent}; border-color: {p.accent}; }}
-QProgressBar {{
-    background: {p.surface_alt}; border: none; border-radius: 4px; height: 8px;
-    text-align: center; color: transparent;
-}}
-QProgressBar::chunk {{ background: {p.accent}; border-radius: 4px; }}
-QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
-QScrollBar::handle:vertical {{ background: {p.border}; border-radius: 4px; min-height: 30px; }}
+QLineEdit:disabled {{ color: {_css(p.faint)}; }}
+QScrollArea {{ background: transparent; border: none; }}
+QScrollBar:vertical {{ background: transparent; width: 10px; margin: 4px 2px; }}
+QScrollBar::handle:vertical {{ background: {_css(handle)}; border-radius: 3px; min-height: 36px; }}
+QScrollBar::handle:vertical:hover {{ background: {_css(p.muted)}; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-QDialog, QMessageBox {{ background: {p.surface}; color: {p.text}; }}
-QToolTip {{ background: {p.surface_alt}; color: {p.text}; border: 1px solid {p.border}; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
 """
 
 
-def apply_theme(app: QApplication, theme: str) -> Palette:
-    palette = resolve_palette(theme)
-    app.setStyleSheet(build_stylesheet(palette))
-    return palette
+class ThemeManager(QObject):
+    """Holds the active palette and tells widgets when it changes."""
+
+    changed = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.p: Palette = DARK
+        self._choice = "dark"
+
+    def set_choice(self, choice: str) -> None:
+        self._choice = choice if choice in ("dark", "light", "system") else "dark"
+        self.refresh()
+
+    def _resolve(self) -> Palette:
+        if self._choice == "light":
+            return LIGHT
+        if self._choice == "system":
+            scheme = QApplication.styleHints().colorScheme()
+            return LIGHT if scheme == Qt.ColorScheme.Light else DARK
+        return DARK
+
+    def refresh(self) -> None:
+        new = self._resolve()
+        first = QApplication.instance().styleSheet() == ""
+        if new is not self.p or first:
+            self.p = new
+            QApplication.instance().setStyleSheet(build_stylesheet(new))
+            self.changed.emit()
+
+    def watch_system(self) -> None:
+        QApplication.styleHints().colorSchemeChanged.connect(
+            lambda *_: self.refresh() if self._choice == "system" else None
+        )
+
+
+theme = ThemeManager()

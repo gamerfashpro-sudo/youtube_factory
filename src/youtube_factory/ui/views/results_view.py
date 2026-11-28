@@ -7,39 +7,30 @@ from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QGuiApplication
-from PySide6.QtWidgets import (
-    QCheckBox,
-    QFileDialog,
-    QGridLayout,
-    QHBoxLayout,
-    QMessageBox,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
 from youtube_factory import strings_ru as ru
 from youtube_factory.app.controller import AppController
 from youtube_factory.models import Analysis, AnalysisMode, Short
 from youtube_factory.services import exporter
 from youtube_factory.services.analyzer import format_time
-from youtube_factory.ui.widgets.common import make_button, make_card, make_label
+from youtube_factory.ui.widgets.common import make_label, transparent_scroll
+from youtube_factory.ui.widgets.controls import Chip, GlassButton, Segmented
+from youtube_factory.ui.widgets.dialogs import confirm
+from youtube_factory.ui.widgets.glass import GlassPanel
 from youtube_factory.ui.widgets.short_card import ShortCard
+from youtube_factory.ui.widgets.viz import Thumb
 
 CARD_MIN_WIDTH = 440
+REVEAL_STEP_MS = 55
+REVEAL_MAX = 8  # cards beyond this appear together with the last staggered one
+
+__all__ = ["ResultsView", "confirm", "safe_filename"]
 
 
 def safe_filename(title: str) -> str:
     name = re.sub(r'[\\/:*?"<>|\r\n\t]+', "_", title).strip(" ._")
     return name[:60] or "shorts"
-
-
-def confirm(parent: QWidget, title: str, text: str) -> bool:
-    box = QMessageBox(QMessageBox.Icon.Question, title, text, parent=parent)
-    yes = box.addButton(ru.BTN_DELETE, QMessageBox.ButtonRole.AcceptRole)
-    box.addButton(ru.BTN_CANCEL, QMessageBox.ButtonRole.RejectRole)
-    box.exec()
-    return box.clickedButton() is yes
 
 
 class ResultsView(QWidget):
@@ -58,20 +49,21 @@ class ResultsView(QWidget):
         outer.setContentsMargins(32, 28, 32, 20)
         outer.setSpacing(14)
 
-        header = make_card()
+        header = GlassPanel(radius=22, strength=1.1)
         h = QHBoxLayout(header)
-        h.setContentsMargins(18, 16, 18, 16)
-        self.thumb = make_label("▶", thumb=True)
-        self.thumb.setFixedSize(160, 90)
-        self.thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        h.setContentsMargins(18, 16, 20, 16)
+        h.setSpacing(18)
+        self.thumb = Thumb(144, 81)
         h.addWidget(self.thumb)
         info = QVBoxLayout()
-        self.title_label = make_label(wrap=True, h2=True)
-        self.meta_label = make_label(wrap=True, muted=True)
-        self.url_btn = make_button(ru.BTN_OPEN_VIDEO)
+        info.setSpacing(8)
+        self.title_label = make_label(wrap=True, role="h2")
         info.addWidget(self.title_label)
-        info.addWidget(self.meta_label)
+        self.chips = QHBoxLayout()
+        self.chips.setSpacing(6)
+        info.addLayout(self.chips)
         row = QHBoxLayout()
+        self.url_btn = GlassButton(ru.BTN_OPEN_VIDEO, "ghost", "external", height=34)
         row.addWidget(self.url_btn)
         row.addStretch(1)
         info.addLayout(row)
@@ -79,33 +71,37 @@ class ResultsView(QWidget):
         outer.addWidget(header)
 
         toolbar = QHBoxLayout()
-        self.fav_filter = QCheckBox(ru.BTN_FAVORITES_ONLY)
-        self.json_btn = make_button(ru.BTN_EXPORT_JSON, ru.EXPORT_SELECTED_HINT)
-        self.csv_btn = make_button(ru.BTN_EXPORT_CSV, ru.EXPORT_SELECTED_HINT)
-        self.new_btn = make_button(ru.BTN_NEW_ANALYSIS, primary=True)
+        toolbar.setSpacing(8)
+        self.fav_filter = Segmented()
+        self.fav_filter.addItem(ru.FILTER_ALL, "all")
+        self.fav_filter.addItem(ru.FILTER_FAVORITES, "fav")
+        self.json_btn = GlassButton(
+            ru.BTN_EXPORT_JSON, "secondary", "export", ru.EXPORT_SELECTED_HINT
+        )
+        self.csv_btn = GlassButton(
+            ru.BTN_EXPORT_CSV, "secondary", "export", ru.EXPORT_SELECTED_HINT
+        )
+        self.new_btn = GlassButton(ru.BTN_NEW_ANALYSIS, "primary", "plus")
         toolbar.addWidget(self.fav_filter)
         toolbar.addStretch(1)
         for b in (self.json_btn, self.csv_btn, self.new_btn):
             toolbar.addWidget(b)
         outer.addLayout(toolbar)
 
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         self.grid_host = QWidget()
         self.grid = QGridLayout(self.grid_host)
-        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setContentsMargins(0, 0, 0, 8)
         self.grid.setSpacing(14)
         self.grid.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.scroll.setWidget(self.grid_host)
+        self.scroll = transparent_scroll(self.grid_host)
         self.scroll.viewport().installEventFilter(self)
         outer.addWidget(self.scroll, 1)
-        self.empty_label = make_label(ru.RESULTS_EMPTY, wrap=True, muted=True)
+        self.empty_label = make_label(ru.RESULTS_EMPTY, wrap=True, role="muted")
         self.empty_label.hide()
         outer.addWidget(self.empty_label)
 
         self.url_btn.clicked.connect(self._open_url)
-        self.fav_filter.toggled.connect(lambda _: self._relayout())
+        self.fav_filter.currentChanged.connect(lambda _: self._relayout())
         self.json_btn.clicked.connect(lambda: self._export("json"))
         self.csv_btn.clicked.connect(lambda: self._export("csv"))
         self.new_btn.clicked.connect(self.new_analysis_requested)
@@ -115,23 +111,35 @@ class ResultsView(QWidget):
         self._analysis = analysis
         v = analysis.video
         self.title_label.setText(v.title or ru.DEFAULT_VIDEO_TITLE)
+        self.thumb.set_image(v.thumbnail)
+        while self.chips.count():
+            item = self.chips.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
         mode = ru.MODE_DEMO if analysis.mode == AnalysisMode.DEMO else ru.MODE_MANUAL
-        parts = [p for p in (v.channel, mode) if p]
+        if v.channel:
+            self.chips.addWidget(Chip(v.channel, "meta", "user"))
+        self.chips.addWidget(Chip(mode, "tag"))
         if v.duration_sec:
-            parts.append(f"{ru.DURATION_LABEL}: {format_time(v.duration_sec)}")
-        self.meta_label.setText(" · ".join(parts))
+            self.chips.addWidget(
+                Chip(f"{ru.DURATION_LABEL}: {format_time(v.duration_sec)}", "meta", "clock")
+            )
+        self.chips.addStretch(1)
         self.url_btn.setVisible(bool(v.url))
-        self.fav_filter.setChecked(False)
+        self.fav_filter.set_index_silently(0)
         for card in self._cards:
             card.deleteLater()
         self._cards = []
         for short in analysis.shorts:
-            self._cards.append(self._make_card(short))
+            self._cards.append(self._make_card(short, v.duration_sec))
         self._columns = 0
         self._relayout()
+        for i, card in enumerate(c for c in self._cards if not c.isHidden()):
+            card.score_ring.set_score(card.short.score, animate=True)
+            card.reveal(min(i, REVEAL_MAX) * REVEAL_STEP_MS)
 
-    def _make_card(self, short: Short) -> ShortCard:
-        card = ShortCard(short)
+    def _make_card(self, short: Short, total_sec: float) -> ShortCard:
+        card = ShortCard(short, total_sec)
         card.copy_requested.connect(self._copy)
         card.save_requested.connect(self._save_text)
         card.favorite_toggled.connect(self._toggle_favorite)
@@ -139,8 +147,11 @@ class ResultsView(QWidget):
         return card
 
     # --- layout -----------------------------------------------------------
+    def _favorites_only(self) -> bool:
+        return self.fav_filter.currentData() == "fav"
+
     def _visible_cards(self) -> list[ShortCard]:
-        if self.fav_filter.isChecked():
+        if self._favorites_only():
             return [c for c in self._cards if c.short.is_favorite]
         return list(self._cards)
 
@@ -207,11 +218,11 @@ class ResultsView(QWidget):
         self._controller.set_favorite(short, not short.is_favorite)
         for card in self._cards:
             if card.short is short:
-                card.refresh()
+                card.refresh(animate_fav=True)
         self.toast_requested.emit(
             ru.TOAST_FAV_ADDED if short.is_favorite else ru.TOAST_FAV_REMOVED, False
         )
-        if self.fav_filter.isChecked():
+        if self._favorites_only():
             self._relayout()
 
     def _delete(self, short: Short) -> None:
