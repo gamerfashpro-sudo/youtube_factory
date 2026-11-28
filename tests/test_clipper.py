@@ -41,14 +41,24 @@ def make_source(path: Path, seconds: int = 3, size: str = "640x360") -> Path:
 
 
 def video_size(path: Path) -> tuple[int, int]:
-    out = subprocess.run([FFMPEG, "-hide_banner", "-i", str(path)], capture_output=True, text=True)  # noqa: S603
+    out = subprocess.run(
+        [FFMPEG, "-hide_banner", "-i", str(path)],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )  # noqa: S603
     match = re.search(r"Stream #\d+:\d+.*Video:.*?, (\d{3,5})x(\d{3,5})", out.stderr)
     assert match, out.stderr
     return int(match.group(1)), int(match.group(2))
 
 
 def has_audio(path: Path) -> bool:
-    out = subprocess.run([FFMPEG, "-hide_banner", "-i", str(path)], capture_output=True, text=True)  # noqa: S603
+    out = subprocess.run(
+        [FFMPEG, "-hide_banner", "-i", str(path)],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )  # noqa: S603
     return "Audio:" in out.stderr
 
 

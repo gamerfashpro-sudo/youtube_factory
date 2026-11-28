@@ -146,7 +146,8 @@ def make_vertical(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=err,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 creationflags=_popen_flags(),
             )
         except OSError as exc:
