@@ -67,7 +67,11 @@ python scripts\make_icon.py
 
 ## Release via GitHub Actions
 
-Pushing a tag such as `v0.1.0` runs `.github\workflows\build-release.yml`, which builds the exe and attaches it to a GitHub Release. The tag must match `__version__` in `src\youtube_factory\__init__.py`, otherwise the workflow fails.
+Pushing a tag such as `v0.2.0` runs `.github\workflows\build-release.yml`, which builds the exe and attaches it to a GitHub Release. The tag must match `__version__` in `src\youtube_factory\__init__.py`, otherwise the workflow fails.
+
+## Runtime tools
+
+ffmpeg and Deno are **not** bundled, which keeps the exe small and fast to start. On first use `services/tools.py` downloads pinned PyPI wheels (`imageio-ffmpeg`, `deno`), checks their SHA-256 and unpacks the binaries into `%LOCALAPPDATA%\YouTubeFactory\tools`. To bump a tool, update the version, URL and hash in `TOOLS` there. `imageio-ffmpeg` is a dev dependency only, so tests can cut real video.
 
 ## Troubleshooting
 

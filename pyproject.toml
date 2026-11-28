@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "youtube-factory"
-version = "0.1.0"
+version = "0.2.0"
 description = "YouTube Factory: turn a long YouTube video into ready-to-publish Shorts ideas."
 readme = "README.md"
 requires-python = ">=3.11"

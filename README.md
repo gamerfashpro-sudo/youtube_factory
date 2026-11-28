@@ -7,7 +7,9 @@
 ## Возможности
 
 - Для каждого Short: диапазон времени («02:14 – 03:02»), хук, название, описание, хэштеги, потенциал от 0 до 100 и объяснение, почему момент может сработать.
-- **Демо-режим.** Встроенный русскоязычный пример, работает полностью офлайн.
+- **Ссылка на YouTube.** Программа сама получает субтитры, название и длительность видео и находит сильные моменты.
+- **Скачивание Shorts.** Каждый момент можно скачать готовым вертикальным видео 1080×1920 (размытие, обрезка или чёрные поля). Скачивается только нужный отрезок.
+- **Демо-режим.** Встроенный русскоязычный пример, работает полностью офлайн (скачать моменты из демо нельзя).
 - **Свой транскрипт.** Вставьте текст или откройте файл `.txt`, `.srt` или `.vtt`. Анализ выполняется локально, без внешних ИИ-сервисов и ключей.
 - Карточки можно редактировать, копировать, добавлять в избранное и удалять.
 - Экспорт в JSON и CSV (CSV в UTF-8 с BOM, открывается в Excel без «кракозябр»). Экспортируются отмеченные карточки, а если ничего не отмечено — все.
@@ -17,18 +19,23 @@
 ## Скачать и установить
 
 1. Откройте страницу [Releases](https://github.com/gamerfashpro-sudo/youtube_factory/releases).
-2. Скачайте файл `YouTubeFactory-v0.1.0-windows-x64.exe`.
+2. Скачайте файл `YouTubeFactory-v0.2.0-windows-x64.exe`.
 3. Запустите его двойным щелчком. Установка не нужна.
 
 Файл пока не имеет цифровой подписи, поэтому Windows SmartScreen может показать предупреждение «Windows защитила ваш компьютер». Нажмите «Подробнее», затем «Выполнить в любом случае». Контрольную сумму SHA-256 можно сверить с указанной в описании релиза.
+
+При первом скачивании видео программа один раз загрузит ffmpeg и Deno (около 80 МБ) в `%LOCALAPPDATA%\YouTubeFactory\tools`. Готовые видео по умолчанию попадают в «Видео\YouTube Factory», папку можно сменить в настройках.
 
 Данные (история, настройки, журнал) хранятся в `%LOCALAPPDATA%\YouTubeFactory`. Чтобы удалить всё, закройте приложение, удалите exe-файл и эту папку.
 
 ## Как пользоваться
 
 1. Нажмите «Попробовать пример», чтобы увидеть результат на встроенном видео.
-2. Для своего видео вставьте ссылку и нажмите «Вставить транскрипт…». Добавьте текст или файл с субтитрами.
-3. Автоматическое получение транскрипта по ссылке появится в следующих версиях.
+2. Для своего видео вставьте ссылку и нажмите «Создать Shorts». Транскрипт программа получит сама.
+3. Если у видео нет субтитров, нажмите «Вставить транскрипт…» и добавьте текст или файл.
+4. В результатах нажмите «Скачать» на нужной карточке, либо «Скачать все» / «Скачать выбранные». Готовые файлы лежат в папке из настроек.
+
+**Важно:** скачивайте и публикуйте только свои видео или видео с разрешения автора. Скачивание чужих роликов может нарушать правила YouTube и авторские права.
 
 ---
 
@@ -65,7 +72,7 @@ The script lints, tests, builds with PyInstaller, runs a smoke test and writes `
 
 ## Environment variables
 
-Version 0.1.0 makes no network requests and needs no keys. The variables below are reserved for future integrations. Secrets are read only from Windows environment variables or a local `.env` file, never from the source code. See [.env.example](.env.example).
+Version 0.2.0 needs no keys: transcripts and videos are fetched with yt-dlp, and ffmpeg and Deno are downloaded once on first use (pinned versions, SHA-256 verified). The variables below are reserved for future integrations. Secrets are read only from Windows environment variables or a local `.env` file, never from the source code. See [.env.example](.env.example).
 
 | Variable | Purpose |
 | --- | --- |
@@ -76,8 +83,7 @@ Version 0.1.0 makes no network requests and needs no keys. The variables below a
 
 ## Roadmap
 
-- 0.2: video metadata and thumbnail via the YouTube Data API.
-- 0.3: automatic transcript retrieval.
+- 0.3: burned-in captions, in-app yt-dlp update, cookies option for YouTube bot checks.
 - 0.4: refining Shorts with a local or cloud LLM.
 - Later: code signing, installer, update check.
 
