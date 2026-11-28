@@ -6,9 +6,16 @@ import logging
 
 from PySide6.QtCore import QObject, Signal
 
-from youtube_factory.app.workers import AnalysisRequest, AnalysisWorker, error_code, error_message
+from youtube_factory.app.workers import (
+    MANUAL_FALLBACK_CODES,
+    AnalysisRequest,
+    AnalysisWorker,
+    error_code,
+    error_message,
+)
 from youtube_factory.data.repositories import AnalysisRepository, HistoryItem
 from youtube_factory.data.settings_store import Settings, SettingsStore
+from youtube_factory.integrations.base import VideoSource
 from youtube_factory.models import Analysis, AnalysisMode, Short, TranscriptSegment
 from youtube_factory.services.url_parser import InvalidUrlError, extract_video_id
 
@@ -29,8 +36,10 @@ class AppController(QObject):
         repo: AnalysisRepository,
         settings_store: SettingsStore,
         parent: QObject | None = None,
+        source: VideoSource | None = None,
     ) -> None:
         super().__init__(parent)
+        self.source = source
         self.repo = repo
         self._settings_store = settings_store
         self.settings: Settings = settings_store.load()
@@ -69,7 +78,7 @@ class AppController(QObject):
     def _start(self, request: AnalysisRequest) -> None:
         if self.is_running:
             return
-        worker = AnalysisWorker(request, parent=self)
+        worker = AnalysisWorker(request, self.source, parent=self)
         worker.progress.connect(self.analysis_progress)
         worker.done.connect(self._on_done)
         worker.failed.connect(self._on_failed)
@@ -98,7 +107,7 @@ class AppController(QObject):
         self.analysis_finished.emit(analysis)
 
     def _on_failed(self, code: str) -> None:
-        self.analysis_failed.emit(error_message(code), code == "no_transcript")
+        self.analysis_failed.emit(error_message(code), code in MANUAL_FALLBACK_CODES)
 
     def _on_thread_finished(self) -> None:
         worker, self._worker = self._worker, None

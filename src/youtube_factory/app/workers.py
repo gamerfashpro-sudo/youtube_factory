@@ -7,8 +7,11 @@ from dataclasses import dataclass
 from PySide6.QtCore import QThread, Signal
 
 from youtube_factory import strings_ru as ru
-from youtube_factory.integrations.base import IntegrationUnavailableError, TranscriptProvider
-from youtube_factory.integrations.stubs import TranscriptServiceStub
+from youtube_factory.integrations.base import (
+    IntegrationUnavailableError,
+    VideoSource,
+    VideoSourceError,
+)
 from youtube_factory.models import Analysis, AnalysisMode, TranscriptSegment, VideoInfo
 from youtube_factory.services import demo
 from youtube_factory.services.analyzer import (
@@ -32,7 +35,17 @@ ERROR_MESSAGES = {
     "too_large": ru.ERR_TRANSCRIPT_LARGE,
     "too_short": ru.ERR_TOO_SHORT,
     "no_candidates": ru.ERR_NO_CANDIDATES,
+    "net_offline": ru.ERR_NET_OFFLINE,
+    "net_error": ru.ERR_NET_ERROR,
+    "video_unavailable": ru.ERR_VIDEO_UNAVAILABLE,
+    "video_private": ru.ERR_VIDEO_PRIVATE,
+    "age_restricted": ru.ERR_AGE_RESTRICTED,
+    "video_live": ru.ERR_VIDEO_LIVE,
+    "bot_check": ru.ERR_BOT_CHECK,
 }
+
+# Errors after which pasting a transcript by hand can still get the user to a result.
+MANUAL_FALLBACK_CODES = frozenset({"no_transcript", "net_error", "bot_check"})
 
 
 def error_message(code: str) -> str:
@@ -47,6 +60,8 @@ def error_code(exc: BaseException) -> str:
         return "transcript_empty" if str(exc) == "empty" else str(exc)
     if isinstance(exc, AnalysisError):
         return str(exc)
+    if isinstance(exc, VideoSourceError):
+        return exc.code
     if isinstance(exc, IntegrationUnavailableError):
         return "no_transcript"
     return "unknown"
@@ -69,12 +84,12 @@ class AnalysisWorker(QThread):
     def __init__(
         self,
         request: AnalysisRequest,
-        transcripts: TranscriptProvider | None = None,
+        source: VideoSource | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._request = request
-        self._transcripts = transcripts or TranscriptServiceStub()
+        self._source = source
 
     def run(self) -> None:
         try:
@@ -104,13 +119,14 @@ class AnalysisWorker(QThread):
             video = demo.demo_video()
             segments = demo.demo_segments()
             self._pause()
+        elif req.segments is None and req.url.strip():
+            video, segments = self._load_from_youtube(req.url)
+            self.progress.emit(1)
         else:
             video = self._video_from_request()
             self._pause()
             self.progress.emit(1)
-            segments = req.segments
-            if segments is None:
-                segments = self._transcripts.fetch(video.video_id)
+            segments = req.segments or []
             video.duration_sec = int(segments[-1].end_sec) if segments else 0
         self.progress.emit(1)
         self._pause()
@@ -122,6 +138,17 @@ class AnalysisWorker(QThread):
         self.progress.emit(4)
         self._pause()
         return Analysis(mode=req.mode, video=video, shorts=shorts)
+
+    def _load_from_youtube(self, url: str) -> tuple[VideoInfo, list[TranscriptSegment]]:
+        source = self._source
+        if source is None:
+            from youtube_factory.integrations.youtube import YouTubeSource
+
+            source = YouTubeSource()
+        loaded = source.load(url)
+        if self.isInterruptionRequested():
+            raise AnalysisCancelled
+        return loaded.video, loaded.segments
 
     def _video_from_request(self) -> VideoInfo:
         req = self._request

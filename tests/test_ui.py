@@ -11,15 +11,34 @@ from youtube_factory.app.controller import AppController  # noqa: E402
 from youtube_factory.data import db  # noqa: E402
 from youtube_factory.data.repositories import AnalysisRepository  # noqa: E402
 from youtube_factory.data.settings_store import SettingsStore  # noqa: E402
+from youtube_factory.integrations.base import LoadedVideo, VideoSourceError  # noqa: E402
+from youtube_factory.models import VideoInfo  # noqa: E402
+from youtube_factory.services import demo  # noqa: E402
 from youtube_factory.ui import main_window as mw  # noqa: E402
 from youtube_factory.ui.views import results_view  # noqa: E402
+
+
+class FakeSource:
+    """Stands in for YouTube so UI tests never touch the network."""
+
+    def __init__(self, error: str = "no_transcript") -> None:
+        self.error = error
+        self.urls: list[str] = []
+
+    def load(self, url: str):
+        self.urls.append(url)
+        if self.error:
+            raise VideoSourceError(self.error)
+        return LoadedVideo(
+            VideoInfo("dQw4w9WgXcQ", url, "Видео из сети", "Канал", 600), demo.demo_segments()
+        )
 
 
 @pytest.fixture
 def window(qtbot, tmp_path, monkeypatch):
     monkeypatch.setenv("YOUTUBE_FACTORY_DATA_DIR", str(tmp_path / "data"))
     repo = AnalysisRepository(db.connect(tmp_path / "h.sqlite3"))
-    controller = AppController(repo, SettingsStore(tmp_path / "s.json"))
+    controller = AppController(repo, SettingsStore(tmp_path / "s.json"), source=FakeSource())
     win = mw.MainWindow(controller)
     qtbot.addWidget(win)
     win.show()
@@ -70,6 +89,34 @@ def test_valid_url_without_transcript_explains_how_to_continue(qtbot, window):
     assert window.stack.currentIndex() == mw.PAGE_ANALYSIS
     assert window.analysis.error_label.text() == ru.ERR_NO_TRANSCRIPT
     assert not window.analysis.paste_btn.isHidden()
+
+
+def test_url_flow_uses_transcript_from_the_source(qtbot, window):
+    window.controller.source = FakeSource(error="")
+    window.home.url_edit.setText("https://youtu.be/dQw4w9WgXcQ")
+    with qtbot.waitSignal(window.controller.analysis_finished, timeout=15000):
+        window.home.create_btn.click()
+    assert window.stack.currentIndex() == mw.PAGE_RESULTS
+    assert window.results.title_label.text() == "Видео из сети"
+    assert 5 <= len(window.results._cards) <= 10
+
+
+@pytest.mark.parametrize(
+    ("code", "message", "offers_paste"),
+    [
+        ("net_offline", ru.ERR_NET_OFFLINE, False),
+        ("video_private", ru.ERR_VIDEO_PRIVATE, False),
+        ("bot_check", ru.ERR_BOT_CHECK, True),
+        ("net_error", ru.ERR_NET_ERROR, True),
+    ],
+)
+def test_source_errors_are_explained_in_russian(qtbot, window, code, message, offers_paste):
+    window.controller.source = FakeSource(error=code)
+    window.home.url_edit.setText("https://youtu.be/dQw4w9WgXcQ")
+    with qtbot.waitSignal(window.controller.analysis_failed, timeout=15000):
+        window.home.create_btn.click()
+    assert window.analysis.error_label.text() == message
+    assert window.analysis.paste_btn.isHidden() is not offers_paste
 
 
 def test_card_actions(qtbot, window, tmp_path):

@@ -157,8 +157,23 @@ def run(argv: list[str]) -> int:
     return result["code"] or code
 
 
+def _integrations_ok() -> bool:
+    """Check that the bundled third-party tools are present. Needs no network."""
+    try:
+        import yt_dlp
+        from yt_dlp.extractor import get_info_extractor
+
+        get_info_extractor("Youtube")
+        _trace(f"yt-dlp {yt_dlp.version.__version__} ready")
+    except Exception as exc:  # noqa: BLE001 - any failure here means a broken bundle
+        _trace(f"yt-dlp is not usable: {exc!r}")
+        print(f"smoke-test: yt-dlp is not usable: {exc!r}")
+        return False
+    return True
+
+
 def _finish_smoke(app: QApplication, analysis, result: dict) -> None:
-    ok = 5 <= len(analysis.shorts) <= 10
+    ok = 5 <= len(analysis.shorts) <= 10 and _integrations_ok()
     _trace(f"analysis finished: {len(analysis.shorts)} shorts")
     print(f"smoke-test: {len(analysis.shorts)} shorts generated")
     result["code"] = 0 if ok else 1
