@@ -4,9 +4,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, Qt, QUrl, Signal
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QSequentialAnimationGroup,
+    Qt,
+    QUrl,
+    QVariantAnimation,
+    Signal,
+)
 from PySide6.QtGui import QDesktopServices, QGuiApplication
-from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QGraphicsOpacityEffect,
+    QGridLayout,
+    QHBoxLayout,
+    QVBoxLayout,
+    QWidget,
+)
 
 from youtube_factory import strings_ru as ru
 from youtube_factory.app.controller import AppController
@@ -14,6 +29,7 @@ from youtube_factory.models import Analysis, AnalysisMode, Short
 from youtube_factory.services import exporter
 from youtube_factory.services.analyzer import format_time
 from youtube_factory.services.exporter import safe_filename
+from youtube_factory.ui.motion import motion
 from youtube_factory.ui.widgets.common import make_label, transparent_scroll
 from youtube_factory.ui.widgets.controls import Chip, GlassButton, Segmented
 from youtube_factory.ui.widgets.dialogs import confirm
@@ -163,6 +179,7 @@ class ResultsView(QWidget):
         self._relayout()
         self.status_row.hide()
         self._update_clips_button()
+        self._play_entrance()
         for i, card in enumerate(c for c in self._cards if not c.isHidden()):
             card.score_ring.set_score(card.short.score, animate=True)
             card.reveal(min(i, REVEAL_MAX) * REVEAL_STEP_MS)
@@ -203,6 +220,30 @@ class ResultsView(QWidget):
             self.grid.setColumnStretch(c, 1)
         self._show_empty_state(not visible)
         self._fit_heights()
+
+    def _play_entrance(self) -> None:
+        """Fade the first cards in one after another, once, when a result arrives.
+
+        The opacity effect lives only for the animation; afterwards the cards are plain
+        widgets again, so nothing keeps costing anything.
+        """
+        if not motion.enabled:
+            return
+        for i, card in enumerate([c for c in self._cards if not c.isHidden()][:8]):
+            effect = QGraphicsOpacityEffect(card)
+            effect.setOpacity(0.0)
+            card.setGraphicsEffect(effect)
+            fade = QVariantAnimation(card)
+            fade.setDuration(380)
+            fade.setStartValue(0.0)
+            fade.setEndValue(1.0)
+            fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+            fade.valueChanged.connect(effect.setOpacity)
+            group = QSequentialAnimationGroup(card)
+            group.addPause(70 * i)
+            group.addAnimation(fade)
+            group.finished.connect(lambda c=card: c.setGraphicsEffect(None))
+            group.start()
 
     def _show_empty_state(self, empty: bool) -> None:
         """Say why the list is empty: no favourites yet, or no Shorts at all."""
@@ -367,6 +408,9 @@ class ResultsView(QWidget):
 
     def _copy(self, short: Short) -> None:
         QGuiApplication.clipboard().setText(exporter.short_to_text(short))
+        card = self._card_for(short)
+        if card:
+            card.copy_btn.flash_done()
         self.toast_requested.emit(ru.TOAST_COPIED, False)
 
     def _save_text(self, short: Short, hook: str, title: str, description: str) -> None:

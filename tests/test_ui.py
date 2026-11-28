@@ -463,3 +463,29 @@ def test_backdrop_grain_is_tiny_and_balanced():
     img = brush.texture().toImage()
     alphas = [img.pixelColor(x, y).alpha() for x in range(0, 128, 7) for y in range(0, 128, 7)]
     assert max(alphas) <= backdrop.GRAIN_MAX_ALPHA
+
+
+# --- micro animations ---------------------------------------------------------------------
+def test_cards_fade_in_once_and_leave_no_effect_behind(qtbot, window, motion_restored):
+    motion_restored.enabled = True
+    run_demo(qtbot, window)
+    cards = window.results._cards
+    assert any(c.graphicsEffect() is not None for c in cards)  # the animation is running
+    qtbot.waitUntil(lambda: all(c.graphicsEffect() is None for c in cards), timeout=5000)
+
+
+def test_cards_appear_at_once_when_animations_are_off(qtbot, window, motion_restored):
+    motion_restored.enabled = False
+    run_demo(qtbot, window)
+    assert all(c.graphicsEffect() is None for c in window.results._cards)
+
+
+def test_copy_flashes_a_check_mark_then_restores_the_icon(qtbot, window):
+    run_demo(qtbot, window)
+    btn = window.results._cards[0].copy_btn
+    assert btn._icon == "copy"
+    btn.flash_done(ms=150)
+    assert btn._icon == "check"
+    btn.flash_done(ms=150)  # a second click while flashing must not forget the real icon
+    qtbot.waitUntil(lambda: btn._icon == "copy", timeout=2000)
+    assert btn._flash_icon is None

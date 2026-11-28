@@ -6,7 +6,7 @@ and repaints only its own rectangle.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QFontMetrics,
@@ -45,6 +45,7 @@ class GlassButton(QAbstractButton):
         super().__init__(parent)
         self._variant = variant
         self._halo: GlowHalo | None = None
+        self._flash_icon: str | None = None
         self._icon = icon
         self._square = square
         self._height = 36 if square else height
@@ -101,6 +102,23 @@ class GlassButton(QAbstractButton):
         if changed and animate:
             self._pop.jump(0.0)
             self._pop.go(1.0, 320)
+        self.update()
+
+    def flash_done(self, ms: int = 1300) -> None:
+        """Show a green check mark for a moment: the click did something."""
+        if self._flash_icon is None:
+            self._flash_icon = self._icon or ""
+        self._icon = "check"
+        self._pop.jump(0.0)
+        self._pop.go(1.0, 320)
+        QTimer.singleShot(ms, self, self._end_flash)
+        self.update()
+
+    def _end_flash(self) -> None:
+        if self._flash_icon is None:
+            return
+        self._icon = self._flash_icon or None
+        self._flash_icon = None
         self.update()
 
     def set_icon_name(self, icon: str) -> None:
@@ -200,6 +218,8 @@ class GlassButton(QAbstractButton):
 
         if self._active:
             fg = pal.amber
+        if self._flash_icon is not None:
+            fg = pal.success
 
         # Content: lifts 1px on hover, sinks 1px on press, pops after toggling.
         dy = -1.0 * h + 1.0 * pr
