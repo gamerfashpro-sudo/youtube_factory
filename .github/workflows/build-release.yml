@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -76,11 +76,39 @@ jobs:
 
       - name: Smoke test the executable
         shell: pwsh
+        timeout-minutes: 5
         env:
           ASSET_NAME: ${{ steps.asset.outputs.name }}
         run: |
-          $proc = Start-Process -FilePath "dist\$env:ASSET_NAME" -ArgumentList "--smoke-test" -PassThru -Wait
+          $log = Join-Path $PWD "smoke.log"
+          $env:YF_SMOKE_LOG = $log
+          $proc = Start-Process -FilePath "dist\$env:ASSET_NAME" -ArgumentList "--smoke-test" -PassThru
+          if (-not $proc.WaitForExit(90000)) {
+            Write-Host "Smoke test did not finish in 90 s. Windows with titles:"
+            Get-Process | Where-Object { $_.MainWindowTitle } |
+              Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize | Out-String | Write-Host
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
+            $bmp = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
+            $bmp.Save((Join-Path $PWD "smoke-screen.png"))
+            Get-Process | Where-Object { $_.ProcessName -like "YouTubeFactory*" } | Stop-Process -Force
+            if (Test-Path $log) { Get-Content $log }
+            throw "Smoke test timed out"
+          }
+          if (Test-Path $log) { Get-Content $log }
           if ($proc.ExitCode -ne 0) { throw "Smoke test failed with exit code $($proc.ExitCode)" }
+
+      - name: Upload smoke test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-diagnostics
+          path: |
+            smoke.log
+            smoke-screen.png
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Checksum
         shell: pwsh

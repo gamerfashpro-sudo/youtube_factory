@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import faulthandler
 import logging
 import os
 import sys
 import tempfile
+import time
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication
@@ -24,6 +26,32 @@ log = logging.getLogger(__name__)
 
 SERVER_NAME = f"{APP_NAME}-single-instance"
 SMOKE_TIMEOUT_MS = 30_000
+SMOKE_DUMP_AFTER_S = 45
+
+
+_trace_file = None
+
+
+def _start_trace() -> None:
+    """Smoke-test diagnostics: stage markers and a Python stack dump if the run hangs.
+
+    Active only when YF_SMOKE_LOG points to a writable file, so normal runs are unaffected.
+    """
+    global _trace_file
+    path = os.environ.get("YF_SMOKE_LOG")
+    if not path:
+        return
+    try:
+        _trace_file = open(path, "a", encoding="utf-8", buffering=1)  # noqa: SIM115
+        faulthandler.enable(_trace_file)
+        faulthandler.dump_traceback_later(SMOKE_DUMP_AFTER_S, file=_trace_file)
+    except OSError:
+        _trace_file = None
+
+
+def _trace(message: str) -> None:
+    if _trace_file is not None:
+        _trace_file.write(f"{time.strftime('%H:%M:%S')} {message}\n")
 
 
 def _set_windows_app_id() -> None:
@@ -62,9 +90,12 @@ def run(argv: list[str]) -> int:
     temp_dir = None
     if smoke:
         # Never touch real user data and leave nothing behind.
-        temp_dir = tempfile.TemporaryDirectory(prefix="yf-smoke-")
+        temp_dir = tempfile.TemporaryDirectory(prefix="yf-smoke-", ignore_cleanup_errors=True)
         os.environ["YOUTUBE_FACTORY_DATA_DIR"] = temp_dir.name
     setup_logging()
+    if smoke:
+        _start_trace()
+    _trace("start")
     log.info("Starting YouTube Factory %s", __version__)
 
     _set_windows_app_id()
@@ -75,6 +106,7 @@ def run(argv: list[str]) -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(ru.APP_TITLE)
     app.setApplicationVersion(__version__)
+    _trace("QApplication created")
 
     if not smoke and _notify_running_instance():
         return 0
@@ -88,8 +120,10 @@ def run(argv: list[str]) -> int:
 
     repo, db_ok = _open_repository()
     controller = AppController(repo, SettingsStore(paths.settings_path()))
+    _trace("controller ready")
     window = MainWindow(controller)
     theme.watch_system()
+    _trace("window created")
 
     server = None
     if not smoke:
@@ -106,26 +140,33 @@ def run(argv: list[str]) -> int:
         QTimer.singleShot(0, controller.start_demo)
 
     window.show()
+    _trace("window shown, entering event loop")
     if not db_ok:
         window.show_toast(ru.ERR_DB, True)
     code = app.exec()
+    _trace(f"event loop finished, code {code}")
     controller.wait()
+    _trace("worker finished")
     if server is not None:
         server.close()
     if temp_dir is not None:
         logging.shutdown()
         temp_dir.cleanup()
+    _trace("exiting")
+    faulthandler.cancel_dump_traceback_later()
     return result["code"] or code
 
 
 def _finish_smoke(app: QApplication, analysis, result: dict) -> None:
     ok = 5 <= len(analysis.shorts) <= 10
+    _trace(f"analysis finished: {len(analysis.shorts)} shorts")
     print(f"smoke-test: {len(analysis.shorts)} shorts generated")
     result["code"] = 0 if ok else 1
     app.quit()
 
 
 def _fail_smoke(app: QApplication, result: dict) -> None:
+    _trace("smoke test failed (analysis error or timeout)")
     print("smoke-test: FAILED")
     result["code"] = 1
     app.quit()
