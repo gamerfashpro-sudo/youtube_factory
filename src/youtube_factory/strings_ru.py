@@ -168,6 +168,18 @@ EXPORT_JSON_FILTER = "JSON (*.json)"
 EXPORT_CSV_FILTER = "CSV (*.csv)"
 DEFAULT_VIDEO_TITLE = "Видео без названия"
 
+# Empty screens
+EMPTY_HISTORY_TITLE = "История пока пуста"
+EMPTY_HISTORY_HINT = "Каждый анализ сохраняется здесь, чтобы к нему можно было вернуться."
+BTN_FIRST_ANALYSIS = "Создать первый анализ"
+EMPTY_RECENT_TITLE = "Пока ничего нет"
+EMPTY_RECENT_HINT = "Вставьте ссылку выше или попробуйте пример: результат появится здесь."
+EMPTY_RESULTS_TITLE = "Здесь пока нет Shorts"
+EMPTY_RESULTS_HINT = "Начните новый анализ, чтобы получить идеи."
+EMPTY_FAVORITES_TITLE = "В избранном пока пусто"
+EMPTY_FAVORITES_HINT = "Нажмите на звёздочку у карточки, чтобы сохранить момент здесь."
+BTN_SHOW_ALL = "Показать все"
+
 # Clips (download and vertical conversion)
 BTN_MAKE_CLIP = "Скачать"
 TIP_MAKE_CLIP = "Скачать этот момент вертикальным видео (Short)"

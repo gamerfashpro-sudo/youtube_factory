@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from youtube_factory import strings_ru as ru
 from youtube_factory.app.controller import AppController
 from youtube_factory.ui.widgets.common import make_label, transparent_scroll
 from youtube_factory.ui.widgets.controls import ActionTile, GlassButton
+from youtube_factory.ui.widgets.empty_state import EmptyState
 from youtube_factory.ui.widgets.fields import GlassLineEdit
 from youtube_factory.ui.widgets.glass import GlassPanel
 from youtube_factory.ui.widgets.history_row import HistoryRow
@@ -119,9 +120,9 @@ class HomeView(QWidget):
         items = self._controller.history(limit=3)
         self.all_btn.setVisible(bool(items))
         if not items:
-            empty = make_label(ru.RECENT_EMPTY, wrap=True, role="muted")
-            empty.setAlignment(Qt.AlignmentFlag.AlignLeft)
-            self.recent_box.addWidget(empty)
+            self.recent_box.addWidget(
+                EmptyState("clock", ru.EMPTY_RECENT_TITLE, ru.EMPTY_RECENT_HINT, compact=True)
+            )
             return
         for item in items:
             row = HistoryRow(item, deletable=False)

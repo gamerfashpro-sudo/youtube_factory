@@ -17,6 +17,7 @@ from youtube_factory.services.exporter import safe_filename
 from youtube_factory.ui.widgets.common import make_label, transparent_scroll
 from youtube_factory.ui.widgets.controls import Chip, GlassButton, Segmented
 from youtube_factory.ui.widgets.dialogs import confirm
+from youtube_factory.ui.widgets.empty_state import EmptyState
 from youtube_factory.ui.widgets.glass import GlassPanel
 from youtube_factory.ui.widgets.short_card import ShortCard
 from youtube_factory.ui.widgets.viz import Thumb
@@ -106,9 +107,16 @@ class ResultsView(QWidget):
         self.scroll = transparent_scroll(self.grid_host)
         self.scroll.viewport().installEventFilter(self)
         outer.addWidget(self.scroll, 1)
-        self.empty_label = make_label(ru.RESULTS_EMPTY, wrap=True, role="muted")
-        self.empty_label.hide()
-        outer.addWidget(self.empty_label)
+        self.empty_state = EmptyState(
+            "star",
+            ru.EMPTY_FAVORITES_TITLE,
+            ru.EMPTY_FAVORITES_HINT,
+            ru.BTN_SHOW_ALL,
+            action_variant="secondary",
+        )
+        self.empty_state.action_clicked.connect(lambda: self.fav_filter.setCurrentIndex(0))
+        self.empty_state.hide()
+        outer.addWidget(self.empty_state)
 
         self.url_btn.clicked.connect(self._open_url)
         self.fav_filter.currentChanged.connect(lambda _: self._relayout())
@@ -193,8 +201,19 @@ class ResultsView(QWidget):
             card.show()
         for c in range(cols):
             self.grid.setColumnStretch(c, 1)
-        self.empty_label.setVisible(not visible)
+        self._show_empty_state(not visible)
         self._fit_heights()
+
+    def _show_empty_state(self, empty: bool) -> None:
+        """Say why the list is empty: no favourites yet, or no Shorts at all."""
+        favourites = self._favorites_only()
+        if favourites:
+            self.empty_state.set_texts(ru.EMPTY_FAVORITES_TITLE, ru.EMPTY_FAVORITES_HINT)
+        else:
+            self.empty_state.set_texts(ru.EMPTY_RESULTS_TITLE, ru.EMPTY_RESULTS_HINT)
+        if self.empty_state.action_btn is not None:
+            self.empty_state.action_btn.setVisible(favourites)
+        self.empty_state.setVisible(empty)
 
     def _fit_heights(self) -> None:
         """Give every card the height its wrapped text needs.

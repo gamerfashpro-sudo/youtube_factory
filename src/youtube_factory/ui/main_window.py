@@ -92,6 +92,7 @@ class MainWindow(QWidget):
         self.home.open_analysis.connect(self.open_analysis)
         self.home.history_requested.connect(lambda: self.show_page(PAGE_HISTORY))
         self.history.open_analysis.connect(self.open_analysis)
+        self.history.new_analysis_requested.connect(lambda: self.show_page(PAGE_HOME))
         self.home.paste_transcript_requested.connect(self._paste_from_home)
         self.results.new_analysis_requested.connect(lambda: self.show_page(PAGE_HOME))
         for view in (self.results, self.history, self.settings_view):

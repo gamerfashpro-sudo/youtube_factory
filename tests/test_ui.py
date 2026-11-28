@@ -185,7 +185,7 @@ def test_history_open_and_delete(qtbot, window, monkeypatch):
     monkeypatch.setattr(history_view, "confirm", lambda *a: True)
     window.history._delete(item.id)
     assert window.controller.history() == []
-    assert window.history.empty_label.isVisible()
+    assert window.history.empty_state.isVisible()
 
 
 def test_theme_change_persists(window, tmp_path):
@@ -411,3 +411,55 @@ def test_primary_button_glows_and_follows_its_state(qtbot):
 
     btn.deleteLater()
     qtbot.waitUntil(lambda: not host.findChildren(GlowHalo), timeout=2000)
+
+
+# --- empty screens and backdrop ----------------------------------------------------------
+def test_empty_history_offers_a_first_analysis(qtbot, window):
+    window.show_page(mw.PAGE_HISTORY)
+    state = window.history.empty_state
+    assert state.isVisibleTo(window.history)
+    assert state.action_btn is not None
+    state.action_btn.click()
+    assert window.stack.currentIndex() == mw.PAGE_HOME
+
+
+def test_empty_favorites_explains_and_returns_to_all(qtbot, window):
+    run_demo(qtbot, window)
+    results = window.results
+    results.fav_filter.setCurrentIndex(1)
+    state = results.empty_state
+    assert state.isVisibleTo(results)
+    assert state.title_label.text() == ru.EMPTY_FAVORITES_TITLE
+    assert state.action_btn.isVisibleTo(state)
+    state.action_btn.click()
+    assert results.fav_filter.currentData() == "all"
+    assert not state.isVisibleTo(results)
+
+
+def test_home_shows_a_compact_empty_state_without_history(window):
+    from youtube_factory.ui.widgets.empty_state import EmptyState
+
+    window.show_page(mw.PAGE_HOME)
+    window.home.refresh_recent()
+    states = window.home.findChildren(EmptyState)
+    assert states and states[0].title_label.text() == ru.EMPTY_RECENT_TITLE
+
+
+def test_empty_art_pops_in_once_and_ends_fully_visible(qtbot):
+    from youtube_factory.ui.widgets.empty_state import EmptyArt
+
+    art = EmptyArt("clock")
+    qtbot.addWidget(art)
+    art.show()
+    qtbot.waitUntil(lambda: art._appear.value == 1.0, timeout=2000)
+    assert not art._appear.running
+
+
+def test_backdrop_grain_is_tiny_and_balanced():
+    from youtube_factory.ui import backdrop
+
+    brush = backdrop.grain_brush()
+    assert backdrop.grain_brush() is brush  # made once
+    img = brush.texture().toImage()
+    alphas = [img.pixelColor(x, y).alpha() for x in range(0, 128, 7) for y in range(0, 128, 7)]
+    assert max(alphas) <= backdrop.GRAIN_MAX_ALPHA

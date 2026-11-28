@@ -9,11 +9,13 @@ from youtube_factory import strings_ru as ru
 from youtube_factory.app.controller import AppController
 from youtube_factory.ui.widgets.common import make_label, transparent_scroll
 from youtube_factory.ui.widgets.dialogs import confirm
+from youtube_factory.ui.widgets.empty_state import EmptyState
 from youtube_factory.ui.widgets.history_row import HistoryRow
 
 
 class HistoryView(QWidget):
     open_analysis = Signal(int)
+    new_analysis_requested = Signal()
     toast_requested = Signal(str, bool)
 
     def __init__(self, controller: AppController, parent: QWidget | None = None) -> None:
@@ -25,8 +27,15 @@ class HistoryView(QWidget):
         outer.setSpacing(0)
         outer.addWidget(make_label(ru.HISTORY_TITLE, role="title"))
         outer.addSpacing(18)
-        self.empty_label = make_label(ru.HISTORY_EMPTY, role="muted")
-        outer.addWidget(self.empty_label)
+        self.empty_state = EmptyState(
+            "clock",
+            ru.EMPTY_HISTORY_TITLE,
+            ru.EMPTY_HISTORY_HINT,
+            ru.BTN_FIRST_ANALYSIS,
+            "sparkle",
+        )
+        self.empty_state.action_clicked.connect(self.new_analysis_requested)
+        outer.addWidget(self.empty_state)
         self.rows = QVBoxLayout()
         self.rows.setSpacing(10)
         outer.addLayout(self.rows)
@@ -45,7 +54,7 @@ class HistoryView(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         items = self._controller.history()
-        self.empty_label.setVisible(not items)
+        self.empty_state.setVisible(not items)
         for item in items:
             row = HistoryRow(item, deletable=True)
             row.open_requested.connect(self.open_analysis)
